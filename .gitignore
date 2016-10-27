@@ -1,0 +1,6 @@
+.DS_Store
+.vscode
+/out/
+/src/app/common/chrome_version.h
+/vendor/llvm-build/
+*.pyc

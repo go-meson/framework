@@ -1,0 +1,113 @@
+#!/usr/bin/env python
+
+import argparse
+import os
+import subprocess
+import sys
+
+from lib.config import LIBCHROMIUMCONTENT_COMMIT, PLATFORM, enable_verbose_mode, is_verbose_mode
+from lib.util import execute_stdout
+
+SOURCE_ROOT = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+VENDOR_DIR = os.path.join(SOURCE_ROOT, 'vendor')
+
+def main():
+    os.chdir(SOURCE_ROOT)
+
+    args = parse_args()
+    if args.verbose:
+        enable_verbose_mode()
+
+    update_submodules()
+
+    dist_dir = os.path.join(VENDOR_DIR, 'brightray', 'vendor',
+                            'libchromiumcontent', 'dist', 'main')
+    libcc_source_path = os.path.join(dist_dir, 'src')
+    libcc_shared_library_path = os.path.join(dist_dir, 'shared_library')
+    libcc_static_library_path = os.path.join(dist_dir, 'static_library')
+
+    if args.build_libchromiumcontent or (not os.path.exists(dist_dir)):
+        build_libchromiumcontent(args.verbose, args.target_arch)
+
+    if PLATFORM != 'win32':
+        # Download prebuilt clang binaries.
+        update_clang()
+
+    bootstrap_brightray(args.target_arch,
+                        libcc_source_path, libcc_shared_library_path,
+                        libcc_static_library_path)
+
+    create_chrome_version_h()
+
+    run_update()
+
+def update_submodules():
+    execute_stdout(['git', 'submodule', 'sync', '--recursive'])
+    execute_stdout(['git', 'submodule', 'update', '--init', '--recursive'])
+
+def bootstrap_brightray(target_arch, libcc_source_path,
+                        libcc_shared_library_path,
+                        libcc_static_library_path):
+    bootstrap = os.path.join(VENDOR_DIR, 'brightray', 'script', 'bootstrap')
+    args = [
+        '--dev',
+        '--commit', LIBCHROMIUMCONTENT_COMMIT,
+        '--target_arch', target_arch,
+        '--libcc_source_path', libcc_source_path,
+        '--libcc_shared_library_path', libcc_shared_library_path,
+        '--libcc_static_library_path', libcc_static_library_path,
+        'DUMMY_URL'
+    ]
+    execute_stdout([sys.executable, bootstrap] + args)
+
+def run_update():
+    args = [sys.executable, os.path.join(SOURCE_ROOT, 'script', 'update.py')]
+
+    execute_stdout(args)
+
+def create_chrome_version_h():
+    version_file = os.path.join(SOURCE_ROOT, 'vendor', 'brightray', 'vendor',
+                                'libchromiumcontent', 'VERSION')
+    target_file = os.path.join(SOURCE_ROOT, 'src', 'app', 'common', 'chrome_version.h')
+    template_file = os.path.join(SOURCE_ROOT, 'script', 'chrome_version.h.in')
+    
+    with open(version_file, 'r') as f:
+        version = f.read()
+    with open(template_file, 'r') as f:
+        template = f.read()
+    content = template.replace('{PLACEHOLDER}', version.strip())
+            
+    # We update the file only if the content has changed (ignoring line ending
+    # differences).
+    should_write = True
+    if os.path.isfile(target_file):
+        with open(target_file, 'r') as f:
+            should_write = f.read().replace('r', '') != content.replace('r', '')
+    if should_write:
+        with open(target_file, 'w') as f:
+            f.write(content)
+
+def build_libchromiumcontent(verbose, target_arch):
+    args = [sys.executable,
+            os.path.join(SOURCE_ROOT, 'script', 'build-libchromiumcontent.py')]
+    if verbose:
+        args += ['-v']
+    
+    execute_stdout(args + ['--target_arch', target_arch])
+
+def update_clang():
+    execute_stdout([os.path.join(SOURCE_ROOT, 'script', 'update_clang.sh')])
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Bootstrap this project')
+    parser.add_argument('-v', '--verbose',
+                        action='store_true',
+                        help='Prints the output of subprocesses')
+    parser.add_argument('--target_arch', default='x64',
+                        help='Manually specify the arch to build for')
+    parser.add_argument('--build_libchromiumcontent', action='store_true',
+                        help='Build local version of libchromiumcontent')
+    return parser.parse_args()
+
+if __name__ == '__main__':
+  sys.exit(main())
