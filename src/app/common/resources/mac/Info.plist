@@ -8,6 +8,10 @@
 	<string>${PRODUCT_NAME}</string>
 	<key>CFBundleExecutable</key>
 	<string>${PRODUCT_NAME}</string>
+	<key>NSMainNibFile</key>
+	<string>MainMenu</string>
+	<key>NSPrincipalClass</key>
+	<string>MesonApplication</string>
 	<key>CFBundlePackageType</key>
 	<string>FMWK</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>

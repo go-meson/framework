@@ -27,7 +27,7 @@
     'targets': [
         {
             'target_name': '<(project_name)_framework',
-            'product_name': '<(product_name) Framework',
+            'product_name': '<(product_name)',
             'type': 'shared_library',
             'dependencies': [
                 '<(project_name)_lib',
@@ -60,7 +60,7 @@
             'xcode_settings': {
                 'MESON_BUNDLE_ID': 'com.<(company_abbr).<(project_name).framework',
                 'INFOPLIST_FILE': 'src/app/common/resources/mac/Info.plist',
-                'LD_DYLIB_INSTALL_NAME': '@rpath/<(product_name) Framework.framework/<(product_name) Framework',
+                'LD_DYLIB_INSTALL_NAME': '@rpath/<(product_name).framework/<(product_name)',
                 'LD_RUNPATH_SEARCH_PATHS': [
                     '@loader_path/Libraries',
                 ],
@@ -84,7 +84,7 @@
                     }],
                     ],
                 },
-                'destination': '<(PRODUCT_DIR)/<(product_name) Framework.framework/Versions/A/Libraries',
+                'destination': '<(PRODUCT_DIR)/<(product_name).framework/Versions/A/Libraries',
                 'files': [
                     '<@(copied_libraries)',
                 ],
@@ -95,7 +95,7 @@
                 'postbuild_name': 'Add symlinks for framework subdirectories',
                 'action': [
                     'tools/mac/create-framework-subdir-symlinks.sh',
-                    '<(product_name) Framework',
+                    '<(product_name)',
                     'Libraries',
                 ],
                 },
@@ -105,11 +105,43 @@
                     'tools/mac/copy-locales.py',
                     '-d',
                     '<(libchromiumcontent_dir)/locales',
-                    '${BUILT_PRODUCTS_DIR}/<(product_name) Framework.framework/Resources',
+                    '${BUILT_PRODUCTS_DIR}/<(product_name).framework/Resources',
                     '<@(locales)',
                 ],
                 },
             ]
+        },
+        {
+            'target_name': '<(project_name)_helper',
+            'product_name': '<(product_name) Helper',
+            'type': 'executable',
+            'dependencies': [
+                '<(project_name)_framework'
+            ],
+            'sources': [
+                '<@(helper_sources)'
+            ],
+            'include_dirs': [
+                '.'
+            ],
+            'mac_bundle': 1,
+            'xcode_settings': {
+                'MESON_BUNDLE_ID': 'com.<(company_abbr).<(project_name).helper',
+                'INFOPLIST_FILE': 'src/renderer/resources/mac/Info.plist',
+                'LD_RUNPATH_SEARCH_PATHS': [
+                '@executable_path/../../..',
+                ],
+            },
+            'postbuilds': [
+                {
+                    'postbuild_name': 'Make More Helpers',
+                    'action': [
+                        'vendor/brightray/tools/mac/make_more_helpers.sh',
+                        '../..',
+                        '<(product_name)',
+                    ],
+                }
+            ],
         },
         {
             'target_name': '<(project_name)_lib',

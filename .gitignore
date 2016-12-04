@@ -1,5 +1,8 @@
 .DS_Store
 .vscode
+.dir-locals.el
+compile_commands.json
+TAGS
 /out/
 /src/app/common/chrome_version.h
 /vendor/llvm-build/
