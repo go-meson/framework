@@ -18,6 +18,7 @@ class MesonWindowBinding : public APIBindingT<MesonWindowBinding>, public Native
 
  public:  // Local Methods
   MethodResult LoadURL(const api::APIArgs& args);
+  MethodResult Close(const api::APIArgs& args);
 
  public:  // NativeWindowObserver:
   void WillCloseWindow(bool* prevent_default) override;

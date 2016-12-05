@@ -298,10 +298,14 @@ void MesonWebContentsBinding::RendererResponsive(content::WebContents* source) {
 
 bool MesonWebContentsBinding::HandleContextMenu(const content::ContextMenuParams& params) {
   if (params.custom_context.is_pepper_menu) {
-    EmitEvent("pepper-context-menu", std::make_pair(params, web_contents()));
+    //TODO:
+    //EmitEvent("pepper-context-menu", std::make_pair(params, web_contents()));
+    EmitEvent("pepper-context-menu");
     web_contents()->NotifyContextMenuClosed(params.custom_context);
   } else {
-    EmitEvent("context-menu", std::make_pair(params, web_contents()));
+    //TODO:
+    //EmitEvent("context-menu", std::make_pair(params, web_contents()));
+    EmitEvent("context-menu");
   }
 
   return true;
@@ -338,7 +342,7 @@ void MesonWebContentsBinding::FindReply(content::WebContents* web_contents,
   result->Set("selectionArea", std::move(rect));
   result->SetInteger("activeMatchOrdinal", active_match_ordinal);
   result->SetBoolean("finalUpdate", final_update);  // Deprecate after 2.0
-  EmitEvent("found-in-page", std::move(result));
+  EmitEvent("found-in-page", result.get());
 }
 
 bool MesonWebContentsBinding::CheckMediaAccessPermission(content::WebContents* web_contents, const GURL& security_origin, content::MediaStreamType type) {

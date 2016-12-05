@@ -130,7 +130,15 @@ void APIServer::Client::DoRegisterEvent(base::DictionaryValue& message) {
   auto remote = (*fiter).second;
 
   bool f = false;
-  if (!opt || !opt->GetBoolean("temporary", &f) || !f) {
+  if (opt && opt->GetBoolean("delete", &f) && f) {
+    // delete event
+    int eventID = -1;
+    f = opt->GetInteger("number", &eventID);
+    DCHECK(f);
+    remote->UnregisterEvents(eventID);
+    ReplyToAction(actionId, "", std::unique_ptr<base::Value>());
+    // no need reply
+  } else if (!opt || !opt->GetBoolean("temporary", &f) || !f) {
     // permanent
     std::string event;
     message.GetString("_method", &event);
@@ -139,7 +147,7 @@ void APIServer::Client::DoRegisterEvent(base::DictionaryValue& message) {
   } else {
     // temporary
     int numRegist = -1;
-    opt->GetInteger("numRegist", &numRegist);
+    opt->GetInteger("number", &numRegist);
     std::unique_ptr<base::ListValue> ret(new base::ListValue());
     for (int idx = 0; idx < numRegist; idx++) {
       auto r = new base::DictionaryValue();

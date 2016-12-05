@@ -12,6 +12,7 @@ namespace meson {
 template <>
 APIBindingT<MesonWindowBinding>::MethodTable APIBindingT<MesonWindowBinding>::methodTable = {
     {"loadURL", std::mem_fn(&MesonWindowBinding::LoadURL)},
+    {"close", std::mem_fn(&MesonWindowBinding::Close)},
 };
 MesonWindowBinding::MesonWindowBinding(unsigned int id, const api::APICreateArg& args)
     : APIBindingT<MesonWindowBinding>(MESON_OBJECT_TYPE_WINDOW, id) {
@@ -218,6 +219,12 @@ MesonWindowBinding::MethodResult MesonWindowBinding::LoadURL(const api::APIArgs&
     opt = &dummy;
   }
   web_contents_->LoadURL(GURL(url), *opt);
+  return MethodResult();
+}
+
+MesonWindowBinding::MethodResult MesonWindowBinding::Close(const api::APIArgs& args) {
+  DCHECK(0 == args.GetSize());
+  window_->Close();
   return MethodResult();
 }
 

@@ -48,13 +48,19 @@ MesonAppBinding::MethodResult MesonAppBinding::SetApplicationMenu(const api::API
   return MethodResult();
 }
 #endif
+
+void MesonAppBinding::ShowMessageBoxCallback(const std::string& eventName, int buttonId) {
+  DLOG(INFO) << __PRETTY_FUNCTION__ << " : " << eventName << ", " << buttonId;
+  EmitEvent(eventName, buttonId);
+}
 MesonAppBinding::MethodResult MesonAppBinding::ShowMessageBox(const api::APIArgs& args) {
   int window_id = -1;
   const base::DictionaryValue* opt = nullptr;
-  int callback_event_id = -1;
-  if (!args.GetInteger(0, &window_id) || !args.GetDictionary(1, &opt) || !args.GetInteger(2, &callback_event_id)) {
+  std::string callback_event_name;
+  if (!args.GetInteger(0, &window_id) || !args.GetDictionary(1, &opt)) {
     return MethodResult("invalid argument");
   }
+  args.GetString(2, &callback_event_name);
   NativeWindow* parent_window = nullptr;
 
   if (window_id != 0) {
@@ -89,10 +95,12 @@ MesonAppBinding::MethodResult MesonAppBinding::ShowMessageBox(const api::APIArgs
   opt->GetInteger("option", &options);
 
   gfx::ImageSkia icon;
-  if (callback_event_id <= 0) {
-    int ret = ::meson::ShowMessageBox(parent_window, static_cast<MessageBoxType>(type), buttons, cancel_id, default_id, options, title, message, detail, icon);
+  if (callback_event_name.empty()) {
+    int ret = ::meson::ShowMessageBox(parent_window, static_cast<MessageBoxType>(type), buttons, default_id, cancel_id, options, title, message, detail, icon);
     return MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
   } else {
+    MessageBoxCallback callback = base::Bind(&MesonAppBinding::ShowMessageBoxCallback, this, callback_event_name);
+    ::meson::ShowMessageBox(parent_window, static_cast<MessageBoxType>(type), buttons, default_id, cancel_id, options, title, message, detail, icon, callback);
     return MethodResult();
   }
 }

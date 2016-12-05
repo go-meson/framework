@@ -16,6 +16,7 @@ class MesonAppBinding : public APIBindingT<MesonAppBinding>,
   MethodResult Exit(const api::APIArgs& args);
   MethodResult SetApplicationMenu(const api::APIArgs& args);
   MethodResult ShowMessageBox(const api::APIArgs& args);
+  void ShowMessageBoxCallback(const std::string& eventName, int buttonId);
  public:  // BrowserObserver
   void OnBeforeQuit(bool* prevent_default) override;
   void OnWillQuit(bool* prevent_default) override;

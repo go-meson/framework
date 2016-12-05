@@ -12,28 +12,53 @@
 #include "base/memory/weak_ptr.h"
 #include "api/api_base.h"
 #include "api/meson.h"
+#include "url/gurl.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace meson {
 namespace internal {
-inline void ToArgs(base::ListValue& list, int a) {
+inline void ToArgs(base::ListValue& list) {}
+inline void ToArg(base::ListValue& list, int a) {
   list.AppendInteger(a);
 }
-inline void ToArgs(base::ListValue& list, double d) {
+inline void ToArg(base::ListValue& list, double d) {
   list.AppendDouble(d);
 }
-inline void ToArgs(base::ListValue& list, bool b) {
+inline void ToArg(base::ListValue& list, bool b) {
   list.AppendBoolean(b);
 }
-inline void ToArgs(base::ListValue& list, const std::string& s) {
+inline void ToArg(base::ListValue& list, const std::string& s) {
   list.AppendString(s);
 }
-inline void ToArgs(base::ListValue& list, const base::DictionaryValue* d) {
+inline void ToArg(base::ListValue& list, base::string16& s) {
+  list.AppendString(s);
+}
+inline void ToArg(base::ListValue& list, const GURL& url) {
+  list.AppendString(url.spec());
+}
+inline void ToArg(base::ListValue& list, long long ll) {
+  list.AppendInteger(static_cast<int>(ll));
+}
+inline void ToArg(base::ListValue& list, const gfx::Rect& r) {
+  std::unique_ptr<base::DictionaryValue> d(new base::DictionaryValue());
+  d->SetInteger("x", r.x());
+  d->SetInteger("y", r.y());
+  d->SetInteger("width", r.width());
+  d->SetInteger("height", r.height());
+  list.Append(std::move(d));
+}
+inline void ToArg(base::ListValue& list, std::vector<base::string16>& strings) {
+  std::unique_ptr<base::ListValue> l(new base::ListValue());
+  l->AppendStrings(strings);
+  list.Append(std::move(l));
+}
+inline void ToArg(base::ListValue& list, const base::DictionaryValue* d) {
   list.Append(d->DeepCopy());
 }
 template <typename First, typename... Rest>
-inline void ToArgs(base::ListValue& list, First f, Rest... rest) {
-  ToArgs(list, f);
-  ToArgs(list, rest...);
+inline void ToArgs(base::ListValue& list, First&& f, Rest&&... rest) {
+  ToArg(list, f);
+  ToArgs(list, std::move(rest)...);
 }
 }
 class APIBinding : public base::RefCountedThreadSafe<APIBinding> {
@@ -70,11 +95,13 @@ class APIBinding : public base::RefCountedThreadSafe<APIBinding> {
   template <typename... T>
   void EmitEvent(const std::string& event_type, T... args) {
     std::unique_ptr<base::ListValue> event(new base::ListValue());
+    meson::internal::ToArgs(*event, args...);
     EmitEvent(event_type, std::move(event));
   }
   template <typename... T>
-  bool EmitPreventEvent(const std::string& event_type, T...args) {
+  bool EmitPreventEvent(const std::string& event_type, T... args) {
     std::unique_ptr<base::ListValue> event(new base::ListValue());
+    meson::internal::ToArgs(*event, args...);
     auto result = EmitEventWithResult(event_type, std::move(event));
     bool ret = false;
     if (result) {
