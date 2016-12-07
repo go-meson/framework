@@ -4,6 +4,11 @@
         'vendor/brightray/brightray.gypi',
     ],
     'variables': {
+        'component%': 'static_library',
+        'V8_BASE': '',
+        'v8_postmortem_support': 'false',
+        'v8_enable_i18n_support': 'false',
+        'v8_inspector': 'false',
     },
     # Settings to compile node under Windows.
     'target_defaults': {

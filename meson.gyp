@@ -92,6 +92,16 @@
             ],
             'postbuilds': [
                 {
+                    'postbuild_name': 'Fix path of ffmpeg',
+                    'action': [
+                        'install_name_tool',
+                        '-change',
+                        '/usr/local/lib/libffmpeg.dylib',
+                        '@rpath/libffmpeg.dylib',
+                        '${BUILT_PRODUCTS_DIR}/<(product_name).framework/Versions/A/<(product_name)',
+                    ],
+                },
+                {
                 'postbuild_name': 'Add symlinks for framework subdirectories',
                 'action': [
                     'tools/mac/create-framework-subdir-symlinks.sh',
@@ -187,12 +197,10 @@
             'export_dependent_settings': [
                 'vendor/brightray/brightray.gyp:brightray',
             ],
+            'link_settings': {
+                'libraries': [ '<@(libchromiumcontent_v8_libraries)' ],
+            },
             'conditions': [
-                ['libchromiumcontent_component', {
-                    'link_settings': {
-                        'libraries': [ '<@(libchromiumcontent_v8_libraries)' ],
-                    },
-                }],
                 ['OS=="mac" and mas_build==0', {
                     'dependencies': [
                     ],
