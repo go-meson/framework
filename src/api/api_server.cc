@@ -13,6 +13,33 @@
 #include "content/public/browser/browser_thread.h"
 #include "api/meson.h"
 
+#ifdef DEBUG
+#define CHECK_CURRENTLY_ON(thread_identifier) \
+  (CHECK(::content::BrowserThread::CurrentlyOn(thread_identifier)) << ::content::BrowserThread::GetDCheckCurrentlyOnErrorMessage(thread_identifier))
+#else
+#define CHECK_CURRENTLY_ON(thread_identifier)
+#endif
+
+namespace {
+bool isNeedRunUIThread(MESON_ACTION_TYPE type) {
+  switch (type) {
+    case MESON_ACTION_TYPE_CREATE:
+      return true;
+    case MESON_ACTION_TYPE_DELETE:
+      return false;
+    case MESON_ACTION_TYPE_CALL:
+      return true;
+    case MESON_ACTION_TYPE_REGISTER_EVENT:
+      return false;
+    case MESON_ACTION_TYPE_REPLY:
+      return true;
+    case MESON_ACTION_TYPE_EVENT:
+    default:
+      assert(false);
+      return false;
+  }
+}
+}
 namespace meson {
 const char kAPIServerThreadName[] = "meson__api_server_thread";
 
@@ -26,21 +53,26 @@ APIServer::Client::Client(API& api)
 
 APIServer::Client::~Client(void) {
 }
-
 void APIServer::Client::ProcessMessage(std::string msg) {
   auto val = base::JSONReader::Read(msg);
   auto json = base::DictionaryValue::From(std::move(val));
 
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   base::Bind(&APIServer::Client::PerformAction, this, base::Passed(&json)));
+  int iaction;
+  json->GetInteger("_action", &iaction);
+
+  MESON_ACTION_TYPE action = static_cast<MESON_ACTION_TYPE>(iaction);
+
+  if (isNeedRunUIThread(action)) {
+    content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
+                                     base::Bind(&APIServer::Client::PerformUIAction, this, action, base::Passed(&json)));
+  } else {
+    content::BrowserThread::PostTask(content::BrowserThread::IO, FROM_HERE,
+                                     base::Bind(&APIServer::Client::PerformIOAction, this, action, base::Passed(&json)));
+  }
 }
 
-void APIServer::Client::PerformAction(std::unique_ptr<base::DictionaryValue> message) {
-  int action;
-  if (!message->GetInteger("_action", &action)) {
-    LOG(ERROR) << __PRETTY_FUNCTION__ << " : _action or type not found";
-    return;
-  }
+void APIServer::Client::PerformUIAction(MESON_ACTION_TYPE action, std::unique_ptr<base::DictionaryValue> message) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   switch (action) {
     case MESON_ACTION_TYPE_CREATE:
       DoCreate(*message);
@@ -48,15 +80,24 @@ void APIServer::Client::PerformAction(std::unique_ptr<base::DictionaryValue> mes
     case MESON_ACTION_TYPE_CALL:
       DoCall(*message);
       break;
+    default:
+      LOG(ERROR) << __PRETTY_FUNCTION__ << " : *** invalid UI action! ***";
+  }
+}
+
+void APIServer::Client::PerformIOAction(MESON_ACTION_TYPE action, std::unique_ptr<base::DictionaryValue> message) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  switch (action) {
     case MESON_ACTION_TYPE_REGISTER_EVENT:
       DoRegisterEvent(*message);
       break;
     default:
-      LOG(ERROR) << __PRETTY_FUNCTION__ << " : *** Unknown action! ***";
+      LOG(ERROR) << __PRETTY_FUNCTION__ << " : *** invalid IO action! ***";
   }
 }
 
 void APIServer::Client::DoCreate(base::DictionaryValue& message) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   int type;
   if (!message.GetInteger("_type", &type)) {
     LOG(ERROR) << __PRETTY_FUNCTION__ << " : _type not found";
@@ -85,15 +126,19 @@ void APIServer::Client::DoCreate(base::DictionaryValue& message) {
   }
 
   auto binding = api_.Create(static_cast<MESON_OBJECT_TYPE>(type), *opt);
+  content::BrowserThread::PostTask(content::BrowserThread::IO, FROM_HERE,
+                                   base::Bind(&APIServer::Client::PostCreate, this, actionId, binding));
+}
+void APIServer::Client::PostCreate(int actionId, scoped_refptr<APIBinding> binding) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::IO);
   auto target = binding->GetID();
   scoped_refptr<Remote> remote = new Remote(*this, target);
   remotes_[target] = remote;
   api_.SetRemote(target, remote);
-  //std::unique_ptr<base::DictionaryValue> res(new base::DictionaryValue);
-  //res->SetInteger("_target", target);
   std::unique_ptr<base::FundamentalValue> res(new base::FundamentalValue(static_cast<int>(target)));
-  ReplyToAction(actionId, std::string(""), std::move(res));
+  SendReply(actionId, "", std::move(res));
 }
+
 void APIServer::Client::DoCall(base::DictionaryValue& message) {
   int id = -1;
   int actionId = -1;
@@ -113,6 +158,7 @@ void APIServer::Client::DoCall(base::DictionaryValue& message) {
 }
 
 void APIServer::Client::DoRegisterEvent(base::DictionaryValue& message) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::IO);
   DLOG(INFO) << __PRETTY_FUNCTION__ << " : " << message;
   int id = -1;
   int actionId = -1;
@@ -229,32 +275,34 @@ APIServer::Client::Remote::Remote(APIServer::Client& client, unsigned int target
     : client_(client), target_(target) {
 }
 
-  void APIServer::Client::Remote::InvokeMethod(const std::string method, std::unique_ptr<api::APIArgs> args, const api::MethodCallback& callback) {
+void APIServer::Client::Remote::InvokeMethod(const std::string method, std::unique_ptr<api::APIArgs> args, const api::MethodCallback& callback) {
   LOG(INFO) << "Remote::InvokeMethod(" << target_ << ", " << method << ")";
 }
 
 void APIServer::Client::Remote::EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event) {
   DLOG(INFO) << "Remote::EmitEvent(" << target_ << ", " << type << ")";
-  auto fiter = registeredEvents_.find(type);
-  if (fiter == registeredEvents_.end()) {
+  int eventID = GetEventID(type);
+  if (eventID < 0) {
     LOG(INFO) << "Remote::EmitEvent(" << target_ << ", " << type << ") : event unregisterd.";
     return;
   }
   content::BrowserThread::PostTask(content::BrowserThread::IO,
                                    FROM_HERE,
-                                   base::Bind(&APIServer::Client::SendEvent, &client_, target_, (*fiter).second, base::Passed(&event)));
+                                   base::Bind(&APIServer::Client::SendEvent, &client_, target_, eventID, base::Passed(&event)));
 }
 
 std::unique_ptr<base::Value> APIServer::Client::Remote::EmitEventWithResult(const std::string& type, std::unique_ptr<base::ListValue> event) {
-  auto fiter = registeredEvents_.find(type);
-  if (fiter == registeredEvents_.end()) {
+  int eventID = GetEventID(type);
+  if (eventID < 0) {
     LOG(INFO) << "Remote::EmitEventWithResult(" << target_ << ", " << type << ") : event unregisterd.";
     return std::unique_ptr<base::Value>();
   }
-  return client_.SendEventWithResult(target_, (*fiter).second, std::move(event));
+  return client_.SendEventWithResult(target_, eventID, std::move(event));
 }
 
 int APIServer::Client::Remote::RegisterEvents(const std::string& event) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  base::subtle::AutoWriteLock locker(eventLock_);
   auto fiter = registeredEvents_.find(event);
   if (fiter != registeredEvents_.end()) {
     return (*fiter).second;
@@ -270,6 +318,8 @@ int APIServer::Client::Remote::RegisterEvents(const std::string& event) {
 }
 
 void APIServer::Client::Remote::UnregisterEvents(int id) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  base::subtle::AutoWriteLock locker(eventLock_);
   for (auto iter = registeredEvents_.begin(); iter != registeredEvents_.end(); iter++) {
     if ((*iter).second == id) {
       (*iter).second = -1;
@@ -279,7 +329,14 @@ void APIServer::Client::Remote::UnregisterEvents(int id) {
   }
 }
 
+int APIServer::Client::Remote::GetEventID(const std::string& eventName) const {
+  base::subtle::AutoReadLock locker(eventLock_);
+  auto fiter = registeredEvents_.find(eventName);
+  return (fiter != registeredEvents_.end()) ? (*fiter).second : -1;
+}
+
 std::pair<int, std::string> APIServer::Client::Remote::RegisterTemporaryEvents() {
+  base::subtle::AutoWriteLock locker(eventLock_);
   auto id = static_cast<int>(registeredEvents_.size()) + 1;
   if (!freeIDs_.empty()) {
     auto top = freeIDs_.begin();

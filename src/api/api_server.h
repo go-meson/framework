@@ -6,6 +6,7 @@
 #include <set>
 #include "base/memory/ref_counted.h"
 #include "base/files/file_path.h"
+#include "base/synchronization/read_write_lock.h"
 
 #include "api/api_binding.h"
 
@@ -36,8 +37,10 @@ class APIServer : public base::RefCountedThreadSafe<APIServer> {
       int RegisterEvents(const std::string& event);
       void UnregisterEvents(int id);
       std::pair<int, std::string> RegisterTemporaryEvents();
+      int GetEventID(const std::string& eventName) const;
 
      private:
+      mutable base::subtle::ReadWriteLock eventLock_;
       APIServer::Client& client_;
       unsigned int target_;
       std::map<std::string, int> registeredEvents_;
@@ -47,8 +50,10 @@ class APIServer : public base::RefCountedThreadSafe<APIServer> {
 
    protected:
    private:
-    void PerformAction(std::unique_ptr<base::DictionaryValue> action);
+    void PerformUIAction(MESON_ACTION_TYPE type, std::unique_ptr<base::DictionaryValue> action);
+    void PerformIOAction(MESON_ACTION_TYPE type, std::unique_ptr<base::DictionaryValue> action);
     void DoCreate(base::DictionaryValue& message);
+    void PostCreate(int actionId, scoped_refptr<APIBinding> binding);
     void DoCall(base::DictionaryValue& message);
     void DoRegisterEvent(base::DictionaryValue& message);
     void ReplyToAction(const unsigned int id, const std::string& error, std::unique_ptr<base::Value> result);
