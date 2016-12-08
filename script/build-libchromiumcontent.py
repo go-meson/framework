@@ -31,8 +31,10 @@ def main():
   execute_stdout([sys.executable, bootstrap])
   execute_stdout([sys.executable, update, '-t', args.target_arch,
                   '--defines', args.defines])
-  execute_stdout([sys.executable, build, '-t', args.target_arch])
-  execute_stdout([sys.executable, create_dist, #'-c', 'static_library',
+  # without static library
+  execute_stdout([sys.executable, build, '-t', args.target_arch, '-c', 'shared_library'])
+  execute_stdout([sys.executable, build, '-t', args.target_arch, '-c', 'ffmpeg'])
+  execute_stdout([sys.executable, create_dist, '-c', 'shared_library',
                   '--no_zip', '-t', args.target_arch])
 
 
