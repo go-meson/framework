@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 
-from lib.config import LIBCHROMIUMCONTENT_COMMIT, PLATFORM, enable_verbose_mode, is_verbose_mode
+from lib.config import LIBCHROMIUMCONTENT_COMMIT, BASE_URL, PLATFORM, enable_verbose_mode, is_verbose_mode
 from lib.util import execute_stdout
 
 SOURCE_ROOT = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
@@ -20,20 +20,23 @@ def main():
 
     update_submodules()
 
-    dist_dir = os.path.join(VENDOR_DIR, 'brightray', 'vendor',
-                            'libchromiumcontent', 'dist', 'main')
-    libcc_source_path = os.path.join(dist_dir, 'src')
-    libcc_shared_library_path = os.path.join(dist_dir, 'shared_library')
-    libcc_static_library_path = os.path.join(dist_dir, 'static_library')
+    libcc_source_path = args.libcc_source_path
+    libcc_shared_library_path = args.libcc_shared_library_path
+    libcc_static_library_path = args.libcc_static_library_path
 
-    if args.build_libchromiumcontent or (not os.path.exists(dist_dir)):
+    if args.build_libchromiumcontent:
         build_libchromiumcontent(args.verbose, args.target_arch)
+        dist_dir = os.path.join(VENDOR_DIR, 'brightray', 'vendor',
+                                'libchromiumcontent', 'dist', 'main')
+        libcc_source_path = os.path.join(dist_dir, 'src')
+        libcc_shared_library_path = os.path.join(dist_dir, 'shared_library')
+        libcc_static_library_path = os.path.join(dist_dir, 'static_library')
 
     if PLATFORM != 'win32':
         # Download prebuilt clang binaries.
         update_clang()
 
-    bootstrap_brightray(args.target_arch,
+    bootstrap_brightray(BASE_URL, args.target_arch,
                         libcc_source_path, libcc_shared_library_path,
                         libcc_static_library_path)
 
@@ -45,19 +48,22 @@ def update_submodules():
     execute_stdout(['git', 'submodule', 'sync', '--recursive'])
     execute_stdout(['git', 'submodule', 'update', '--init', '--recursive'])
 
-def bootstrap_brightray(target_arch, libcc_source_path,
+def bootstrap_brightray(url, target_arch, libcc_source_path,
                         libcc_shared_library_path,
                         libcc_static_library_path):
     bootstrap = os.path.join(VENDOR_DIR, 'brightray', 'script', 'bootstrap')
     args = [
-        '--dev',
+        '--dev',                # for dev only
         '--commit', LIBCHROMIUMCONTENT_COMMIT,
         '--target_arch', target_arch,
-        '--libcc_source_path', libcc_source_path,
-        '--libcc_shared_library_path', libcc_shared_library_path,
-        '--libcc_static_library_path', libcc_static_library_path,
-        'DUMMY_URL'
+        url,
     ]
+    if (libcc_source_path != None and
+        libcc_shared_library_path != None and
+        libcc_static_library_path != None):
+        args += ['--libcc_source_path', libcc_source_path,
+                 '--libcc_shared_library_path', libcc_shared_library_path,
+                 '--libcc_static_library_path', libcc_static_library_path]
     execute_stdout([sys.executable, bootstrap] + args)
 
 def run_update():
@@ -107,7 +113,15 @@ def parse_args():
                         help='Manually specify the arch to build for')
     parser.add_argument('--build_libchromiumcontent', action='store_true',
                         help='Build local version of libchromiumcontent')
+    parser.add_argument('--libcc_source_path', required=False,
+                        help='The source path of libchromiumcontent. ' \
+                        'NOTE: All options of libchromiumcontent are ' \
+                        'required OR let electron choose it')
+    parser.add_argument('--libcc_shared_library_path', required=False,
+                        help='The shared library path of libchromiumcontent.')
+    parser.add_argument('--libcc_static_library_path', required=False,
+                        help='The static library path of libchromiumcontent.')
     return parser.parse_args()
 
 if __name__ == '__main__':
-  sys.exit(main())
+    sys.exit(main())
