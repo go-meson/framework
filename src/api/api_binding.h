@@ -7,6 +7,7 @@
 #include <tuple>
 #include <functional>
 #include <exception>
+#include <list>
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -61,7 +62,7 @@ inline void ToArgs(base::ListValue& list, First&& f, Rest&&... rest) {
   ToArgs(list, std::move(rest)...);
 }
 }
-class APIBinding : public base::RefCountedThreadSafe<APIBinding> {
+class APIBinding : public base::RefCountedThreadSafe<APIBinding>, public base::SupportsWeakPtr<APIBinding> {
  protected:
   struct MethodResult {
     std::string error_;
@@ -87,11 +88,6 @@ class APIBinding : public base::RefCountedThreadSafe<APIBinding> {
   MESON_OBJECT_TYPE type(void) const { return type_; }
   unsigned int GetID() const { return id_; }
 
- protected:
-  void InvokeRemoteMethod(const std::string& method, std::unique_ptr<api::APIArgs> args, const api::MethodCallback& callback);
-  void EmitEvent(const std::string& event_type, std::unique_ptr<base::ListValue> event);
-  std::unique_ptr<base::Value> EmitEventWithResult(const std::string& event_type, std::unique_ptr<base::ListValue> event);
-
   template <typename... T>
   void EmitEvent(const std::string& event_type, T... args) {
     std::unique_ptr<base::ListValue> event(new base::ListValue());
@@ -111,6 +107,11 @@ class APIBinding : public base::RefCountedThreadSafe<APIBinding> {
   }
 
  protected:
+  void InvokeRemoteMethod(const std::string& method, std::unique_ptr<api::APIArgs> args, const api::MethodCallback& callback);
+  void EmitEvent(const std::string& event_type, std::unique_ptr<base::ListValue> event);
+  std::unique_ptr<base::Value> EmitEventWithResult(const std::string& event_type, std::unique_ptr<base::ListValue> event);
+
+ protected:
   MESON_OBJECT_TYPE type_;
   unsigned int id_;
   DISALLOW_COPY_AND_ASSIGN(APIBinding);
@@ -122,21 +123,19 @@ class APIBindingT : public APIBinding {
   typedef std::map<std::string, std::function<MethodResult(T*, const api::APIArgs&)>> MethodTable;
 
  public:
-  base::WeakPtr<T> GetWeakPtr(void) { return weak_ptr_factory_.GetWeakPtr(); }
   void CallLocalMethod(const std::string& method, const api::APIArgs& args, const api::MethodCallback& callback) override {
     auto fiter = methodTable.find(method);
     if (fiter == methodTable.end()) {
       callback.Run(std::string("CALL : unknown method: ") + method, std::unique_ptr<base::Value>());
       return;
     }
-    auto result = std::move((*fiter).second((T*)this, args));
+    auto&& result = (*fiter).second(static_cast<T*>(this), args);
     callback.Run(result.error_, std::move(result.value_));
   }
 
  protected:
-  base::WeakPtrFactory<T> weak_ptr_factory_;
   APIBindingT(MESON_OBJECT_TYPE type, unsigned int id)
-      : APIBinding(type, id), weak_ptr_factory_(static_cast<T*>(this)) {}
+      : APIBinding(type, id) {}
   static MethodTable methodTable;
 };
 
@@ -154,19 +153,57 @@ class APIBindingFactory {
   DISALLOW_COPY_AND_ASSIGN(APIBindingFactory);
 };
 
-class APIBindingRemote : public base::RefCountedThreadSafe<APIBindingRemote> {
+class APIBindingRemote : public base::RefCountedThreadSafe<APIBindingRemote>, public base::SupportsWeakPtr<APIBindingRemote> {
  public:
   virtual ~APIBindingRemote(void) {}
 
  public:
-  virtual void InvokeMethod(const std::string method, std::unique_ptr<api::APIArgs> args, const api::MethodCallback& callback) = 0;
+  virtual void RemoveBinding(APIBinding* binding) = 0;
+
+ public:
+  virtual bool InvokeMethod(const std::string method, std::unique_ptr<api::APIArgs> args, const api::MethodCallback& callback) = 0;
   virtual void EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event) = 0;
   virtual std::unique_ptr<base::Value> EmitEventWithResult(const std::string& type, std::unique_ptr<base::ListValue> event) = 0;
 
+ public:
+  APIBinding* Binding() {
+    return binding_.get();
+  }
+  template <typename T>
+  T* Binding() {
+    return static_cast<T*>(Binding());
+  }
+  bool HasBinding(APIBinding* binding) const {
+    return binding_.get() == binding;
+  }
+
  protected:
-  APIBindingRemote() {}
+  APIBindingRemote(scoped_refptr<APIBinding> binding)
+      : binding_(binding) {}
+
+  scoped_refptr<APIBinding> binding_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(APIBindingRemote);
+};
+
+class APIBindingRemoteList : public base::RefCountedThreadSafe<APIBindingRemoteList> {
+ public:
+  APIBindingRemoteList(void);
+  ~APIBindingRemoteList(void);
+
+ public:
+  void AddRemote(APIBindingRemote* remote);
+  bool RemoveRemote(APIBindingRemote* remote);
+  void RemoveBinding(APIBinding* binding);
+
+ public:
+  void InvokeMethod(const std::string method, std::unique_ptr<api::APIArgs> args, const api::MethodCallback& callback);
+  void EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event);
+  std::unique_ptr<base::Value> EmitEventWithResult(const std::string& type, std::unique_ptr<base::ListValue> event);
+
+ private:
+  std::list<scoped_refptr<APIBindingRemote>> remotes_;
+  DISALLOW_COPY_AND_ASSIGN(APIBindingRemoteList);
 };
 }

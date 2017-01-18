@@ -151,6 +151,7 @@ CommonWebContentsDelegate::~CommonWebContentsDelegate() {
 }
 
 void CommonWebContentsDelegate::InitWithWebContents(content::WebContents* web_contents, MesonBrowserContext* browser_context) {
+  LOG(INFO) << __PRETTY_FUNCTION__;
   browser_context_ = browser_context;
   web_contents->SetDelegate(this);
 
@@ -260,94 +261,64 @@ bool CommonWebContentsDelegate::IsFullscreenForTabOrPending(
   return html_fullscreen_;
 }
 
-content::SecurityStyle CommonWebContentsDelegate::GetSecurityStyle(
-    content::WebContents* web_contents,
-    content::SecurityStyleExplanations* explanations) {
-  auto model_client =
-      MesonSecurityStateModelClient::FromWebContents(web_contents);
+content::SecurityStyle CommonWebContentsDelegate::GetSecurityStyle(content::WebContents* web_contents,
+                                                                   content::SecurityStyleExplanations* explanations) {
+  auto model_client = MesonSecurityStateModelClient::FromWebContents(web_contents);
 
-  const SecurityStateModel::SecurityInfo& security_info =
-      model_client->GetSecurityInfo();
+  const SecurityStateModel::SecurityInfo& security_info = model_client->GetSecurityInfo();
 
-  const content::SecurityStyle security_style =
-      SecurityLevelToSecurityStyle(security_info.security_level);
+  const content::SecurityStyle security_style = SecurityLevelToSecurityStyle(security_info.security_level);
 
-  explanations->ran_insecure_content_style =
-      SecurityLevelToSecurityStyle(
-          SecurityStateModel::kRanInsecureContentLevel);
-  explanations->displayed_insecure_content_style =
-      SecurityLevelToSecurityStyle(
-          SecurityStateModel::kDisplayedInsecureContentLevel);
+  explanations->ran_insecure_content_style = SecurityLevelToSecurityStyle(SecurityStateModel::kRanInsecureContentLevel);
+  explanations->displayed_insecure_content_style = SecurityLevelToSecurityStyle(SecurityStateModel::kDisplayedInsecureContentLevel);
 
   explanations->scheme_is_cryptographic = security_info.scheme_is_cryptographic;
   if (!security_info.scheme_is_cryptographic)
     return security_style;
 
-  if (security_info.sha1_deprecation_status ==
-      SecurityStateModel::DEPRECATED_SHA1_MAJOR) {
-    explanations->broken_explanations.push_back(
-        content::SecurityStyleExplanation(
-            kSHA1Certificate,
-            kSHA1MajorDescription,
-            security_info.cert_id));
-  } else if (security_info.sha1_deprecation_status ==
-             SecurityStateModel::DEPRECATED_SHA1_MINOR) {
-    explanations->unauthenticated_explanations.push_back(
-        content::SecurityStyleExplanation(
-            kSHA1Certificate,
-            kSHA1MinorDescription,
-            security_info.cert_id));
+  if (security_info.sha1_deprecation_status == SecurityStateModel::DEPRECATED_SHA1_MAJOR) {
+    explanations->broken_explanations.push_back(content::SecurityStyleExplanation(kSHA1Certificate,
+                                                                                  kSHA1MajorDescription,
+                                                                                  security_info.cert_id));
+  } else if (security_info.sha1_deprecation_status == SecurityStateModel::DEPRECATED_SHA1_MINOR) {
+    explanations->unauthenticated_explanations.push_back(content::SecurityStyleExplanation(kSHA1Certificate,
+                                                                                           kSHA1MinorDescription,
+                                                                                           security_info.cert_id));
   }
 
-  explanations->ran_insecure_content =
-      security_info.mixed_content_status ==
-          SecurityStateModel::RAN_MIXED_CONTENT ||
-      security_info.mixed_content_status ==
-          SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT;
-  explanations->displayed_insecure_content =
-      security_info.mixed_content_status ==
-          SecurityStateModel::DISPLAYED_MIXED_CONTENT ||
-      security_info.mixed_content_status ==
-          SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT;
+  explanations->ran_insecure_content = security_info.mixed_content_status == SecurityStateModel::RAN_MIXED_CONTENT ||
+                                       security_info.mixed_content_status == SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT;
+  explanations->displayed_insecure_content = security_info.mixed_content_status == SecurityStateModel::DISPLAYED_MIXED_CONTENT ||
+                                             security_info.mixed_content_status == SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT;
 
   if (net::IsCertStatusError(security_info.cert_status)) {
-    std::string error_string = net::ErrorToString(
-        net::MapCertStatusToNetError(security_info.cert_status));
+    std::string error_string = net::ErrorToString(net::MapCertStatusToNetError(security_info.cert_status));
 
-    content::SecurityStyleExplanation explanation(
-        kCertificateError,
-        "There are issues with the site's certificate chain " + error_string,
-        security_info.cert_id);
+    content::SecurityStyleExplanation explanation(kCertificateError,
+                                                  "There are issues with the site's certificate chain " + error_string,
+                                                  security_info.cert_id);
 
     if (net::IsCertStatusMinorError(security_info.cert_status))
       explanations->unauthenticated_explanations.push_back(explanation);
     else
       explanations->broken_explanations.push_back(explanation);
   } else {
-    if (security_info.sha1_deprecation_status ==
-        SecurityStateModel::NO_DEPRECATED_SHA1) {
-      explanations->secure_explanations.push_back(
-          content::SecurityStyleExplanation(
-              kValidCertificate,
-              kValidCertificateDescription,
-              security_info.cert_id));
+    if (security_info.sha1_deprecation_status == SecurityStateModel::NO_DEPRECATED_SHA1) {
+      explanations->secure_explanations.push_back(content::SecurityStyleExplanation(kValidCertificate,
+                                                                                    kValidCertificateDescription,
+                                                                                    security_info.cert_id));
     }
   }
 
   if (security_info.is_secure_protocol_and_ciphersuite) {
-    explanations->secure_explanations.push_back(
-        content::SecurityStyleExplanation(
-            kSecureProtocol,
-            kSecureProtocolDescription));
+    explanations->secure_explanations.push_back(content::SecurityStyleExplanation(kSecureProtocol,
+                                                                                  kSecureProtocolDescription));
   }
 
   return security_style;
 }
 
-void CommonWebContentsDelegate::DevToolsSaveToFile(
-    const std::string& url,
-    const std::string& content,
-    bool save_as) {
+void CommonWebContentsDelegate::DevToolsSaveToFile(const std::string& url, const std::string& content, bool save_as) {
   base::FilePath path;
   auto it = saved_files_.find(url);
   if (it != saved_files_.end() && !save_as) {
@@ -355,8 +326,7 @@ void CommonWebContentsDelegate::DevToolsSaveToFile(
   } else {
     file_dialog::Filters filters;
     base::FilePath default_path(base::FilePath::FromUTF8Unsafe(url));
-    if (!file_dialog::ShowSaveDialog(owner_window(), url, "", default_path,
-                                     filters, &path)) {
+    if (!file_dialog::ShowSaveDialog(owner_window(), url, "", default_path, filters, &path)) {
       base::StringValue url_value(url);
       web_contents_->CallClientFunction(
           "DevToolsAPI.canceledSaveURL", &url_value, nullptr, nullptr);
@@ -365,25 +335,22 @@ void CommonWebContentsDelegate::DevToolsSaveToFile(
   }
 
   saved_files_[url] = path;
-  BrowserThread::PostTaskAndReply(
-      BrowserThread::FILE, FROM_HERE,
-      base::Bind(&WriteToFile, path, content),
-      base::Bind(&CommonWebContentsDelegate::OnDevToolsSaveToFile,
-                 base::Unretained(this), url));
+  BrowserThread::PostTaskAndReply(BrowserThread::FILE, FROM_HERE,
+                                  base::Bind(&WriteToFile, path, content),
+                                  base::Bind(&CommonWebContentsDelegate::OnDevToolsSaveToFile,
+                                             base::Unretained(this), url));
 }
 
-void CommonWebContentsDelegate::DevToolsAppendToFile(
-    const std::string& url,
-    const std::string& content) {
+void CommonWebContentsDelegate::DevToolsAppendToFile(const std::string& url,
+                                                     const std::string& content) {
   auto it = saved_files_.find(url);
   if (it == saved_files_.end())
     return;
 
-  BrowserThread::PostTaskAndReply(
-      BrowserThread::FILE, FROM_HERE,
-      base::Bind(&AppendToFile, it->second, content),
-      base::Bind(&CommonWebContentsDelegate::OnDevToolsAppendToFile,
-                 base::Unretained(this), url));
+  BrowserThread::PostTaskAndReply(BrowserThread::FILE, FROM_HERE,
+                                  base::Bind(&AppendToFile, it->second, content),
+                                  base::Bind(&CommonWebContentsDelegate::OnDevToolsAppendToFile,
+                                             base::Unretained(this), url));
 }
 
 void CommonWebContentsDelegate::DevToolsRequestFileSystems() {

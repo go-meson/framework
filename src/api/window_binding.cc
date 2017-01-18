@@ -13,6 +13,10 @@ template <>
 APIBindingT<MesonWindowBinding>::MethodTable APIBindingT<MesonWindowBinding>::methodTable = {
     {"loadURL", std::mem_fn(&MesonWindowBinding::LoadURL)},
     {"close", std::mem_fn(&MesonWindowBinding::Close)},
+    {"webcontents", std::mem_fn(&MesonWindowBinding::GetWebContents)},
+    {"openDevTools", std::mem_fn(&MesonWindowBinding::OpenDevTools)},
+    {"closeDevTools", std::mem_fn(&MesonWindowBinding::CloseDevTools)},
+    {"isDevToolsOpened", std::mem_fn(&MesonWindowBinding::IsDevToolsOpened)},
 };
 MesonWindowBinding::MesonWindowBinding(unsigned int id, const api::APICreateArg& args)
     : APIBindingT<MesonWindowBinding>(MESON_OBJECT_TYPE_WINDOW, id) {
@@ -51,7 +55,10 @@ MesonWindowBinding::MesonWindowBinding(unsigned int id, const api::APICreateArg&
   }
 
   // Creates BrowserWindow.
-  window_.reset(NativeWindow::Create(web_contents_->managed_web_contents(), args, parent_window_ ? parent_window_->window_.get() : nullptr));
+  window_.reset(NativeWindow::Create(
+      web_contents_->managed_web_contents(),
+      args,
+      parent_window_ ? parent_window_->window_.get() : nullptr));
   web_contents_->SetOwnerWindow(window_.get());
 
 #if defined(TOOLKIT_VIEWS)
@@ -65,14 +72,17 @@ MesonWindowBinding::MesonWindowBinding(unsigned int id, const api::APICreateArg&
   window_->AddObserver(this);
 
   if (parent_window_)
-    parent_window_->child_windows_[id] = GetWeakPtr();
+    parent_window_->child_windows_[id] = base::AsWeakPtr(this);
 }
 MesonWindowBinding::~MesonWindowBinding(void) {
   DLOG(INFO) << __PRETTY_FUNCTION__;
+  if (!window_->IsClosed()) {
+    window_->CloseContents(nullptr);
+  }
+  base::MessageLoop::current()->DeleteSoon(FROM_HERE, window_.release());
 }
 
 void MesonWindowBinding::WillCloseWindow(bool* prevent_default) {
-  //TODO: 返却値をどうやって受け取ろう……。
   auto prevent = EmitPreventEvent("close");
   LOG(INFO) << "WillCloseWindow: " << prevent;
   *prevent_default = prevent;
@@ -80,7 +90,7 @@ void MesonWindowBinding::WillCloseWindow(bool* prevent_default) {
 
 void MesonWindowBinding::WillDestroyNativeObject() {
   // Close all child windows before closing current window.
-  DLOG(INFO) << __PRETTY_FUNCTION__;
+  LOG(INFO) << __PRETTY_FUNCTION__;
   for (auto& kv : child_windows_) {
     if (kv.second) {
       kv.second->window_->CloseImmediately();
@@ -88,11 +98,22 @@ void MesonWindowBinding::WillDestroyNativeObject() {
   }
 }
 
+#if 1
+namespace {
+void windowFinalizer(scoped_refptr<MesonWindowBinding> self) {
+  LOG(INFO) << __PRETTY_FUNCTION__ << (long)self.get();
+}
+}
+#endif
+
 void MesonWindowBinding::OnWindowClosed() {
+  LOG(INFO) << __PRETTY_FUNCTION__;
   web_contents_->DestroyWebContents();
 
   //RemoveFromWeakMap();
   window_->RemoveObserver(this);
+
+  scoped_refptr<MesonWindowBinding> self(this);
 
   // We can not call Destroy here because we need to call Emit first, but we
   // also do not want any method to be used, so just mark as destroyed here.
@@ -100,10 +121,14 @@ void MesonWindowBinding::OnWindowClosed() {
 
   EmitEvent("closed");
 
-  //RemoveFromParentChildWindows();
+  API::Get()->RemoveBinding(this);
 
-  // Destroy the native class when window is closed.
-  //base::MessageLoop::current()->PostTask(FROM_HERE, GetDestroyClosure());
+//RemoveFromParentChildWindows();
+
+// Destroy the native class when window is closed.
+#if 1
+  base::MessageLoop::current()->PostTask(FROM_HERE, base::Bind(windowFinalizer, self));
+#endif
 }
 
 void MesonWindowBinding::OnWindowBlur() {
@@ -226,6 +251,33 @@ MesonWindowBinding::MethodResult MesonWindowBinding::Close(const api::APIArgs& a
   DCHECK(0 == args.GetSize());
   window_->Close();
   return MethodResult();
+}
+
+MesonWindowBinding::MethodResult MesonWindowBinding::GetWebContents(const api::APIArgs& args) {
+  DCHECK(0 == args.GetSize());
+  CHECK(web_contents_);
+  int contents_id = web_contents_->GetID();
+  std::unique_ptr<base::Value> ret(new base::FundamentalValue(contents_id));
+  // bind?
+  return MethodResult(std::move(ret));
+}
+
+MesonWindowBinding::MethodResult MesonWindowBinding::OpenDevTools(const api::APIArgs& args) {
+  web_contents_->OpenDevTools(nullptr);
+  return MethodResult();
+}
+MesonWindowBinding::MethodResult MesonWindowBinding::CloseDevTools(const api::APIArgs& args) {
+  web_contents_->CloseDevTools();
+  return MethodResult();
+}
+MesonWindowBinding::MethodResult MesonWindowBinding::IsDevToolsOpened(const api::APIArgs& args) {
+  bool f = web_contents_->IsDevToolsOpened();
+  std::unique_ptr<base::Value> ret(new base::FundamentalValue(f));
+  return MethodResult(std::move(ret));
+}
+
+bool MesonWindowBinding::IsFocused() const {
+  return window_->IsFocused();
 }
 
 MesonWindowFactory::MesonWindowFactory() {}

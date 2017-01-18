@@ -41,18 +41,81 @@ bool isNeedRunUIThread(MESON_ACTION_TYPE type) {
 }
 }
 namespace meson {
+namespace {
+class APIClientRemote : public APIBindingRemote {
+ public:
+  APIClientRemote(APIServer::Client& client, scoped_refptr<APIBinding> binding);
+
+ public:
+  void RemoveBinding(APIBinding* binding) override;
+
+  virtual bool InvokeMethod(const std::string method, std::unique_ptr<api::APIArgs> args, const api::MethodCallback& callback) override;
+  virtual void EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event) override;
+  virtual std::unique_ptr<base::Value> EmitEventWithResult(const std::string& type, std::unique_ptr<base::ListValue> event) override;
+
+  int RegisterEvents(const std::string& event);
+  void UnregisterEvents(int id);
+  std::pair<int, std::string> RegisterTemporaryEvents();
+  int GetEventID(const std::string& eventName) const;
+
+ private:
+  mutable base::subtle::ReadWriteLock eventLock_;
+  APIServer::Client& client_;
+  std::map<std::string, int> registeredEvents_;
+  std::set<int> freeIDs_;
+  DISALLOW_COPY_AND_ASSIGN(APIClientRemote);
+};
+}
+class APIServer::Client : public base::RefCountedThreadSafe<Client> {
+ public:
+  Client(API& api);
+  virtual ~Client(void);
+
+ public:
+  void ProcessMessage(std::string msg);
+
+ public:
+  void DoSendEvent(const unsigned int target, int event_id, std::unique_ptr<base::ListValue> args) {
+    content::BrowserThread::PostTask(content::BrowserThread::IO,
+                                     FROM_HERE,
+                                     base::Bind(&APIServer::Client::SendEvent, this, target, event_id, base::Passed(&args)));
+  }
+  std::unique_ptr<base::Value> DoSendEventWithResult(const unsigned int target, int event_id, std::unique_ptr<base::ListValue> args) {
+    return SendEventWithResult(target, event_id, std::move(args));
+  }
+
+ private:
+  void PerformUIAction(MESON_ACTION_TYPE type, std::unique_ptr<base::DictionaryValue> action);
+  void PerformIOAction(MESON_ACTION_TYPE type, std::unique_ptr<base::DictionaryValue> action);
+  void DoCreate(base::DictionaryValue& message);
+  void PostCreate(int actionId, scoped_refptr<APIBinding> binding);
+  void DoCall(base::DictionaryValue& message);
+  void DoRegisterEvent(base::DictionaryValue& message);
+  void ReplyToAction(const unsigned int id, const std::string& error, std::unique_ptr<base::Value> result);
+  void SendReply(const unsigned int id, const std::string& error, std::unique_ptr<base::Value> result);
+  void SendEvent(const unsigned int target, int event_id, std::unique_ptr<base::ListValue> args);
+  std::unique_ptr<base::Value> SendEventWithResult(const unsigned int target, int event_id, std::unique_ptr<base::ListValue> args);
+
+ private:
+  std::map<unsigned int, base::WeakPtr<APIClientRemote>> remotes_;
+  API& api_;
+  DISALLOW_COPY_AND_ASSIGN(Client);
+};
+
 const char kAPIServerThreadName[] = "meson__api_server_thread";
 
 APIServer::Client::Client(API& api)
     : api_(api) {
-  api_.CreateAppBinding();
-  scoped_refptr<Remote> remote = new Remote(*this, MESON_OBJID_APP);
-  remotes_[MESON_OBJID_APP] = remote;
-  api_.SetRemote(MESON_OBJID_APP, remote);
+  auto binding = api_.CreateAppBinding();
+  scoped_refptr<APIClientRemote> remote = new APIClientRemote(*this, binding);
+  api_.SetRemote(MESON_OBJID_APP, remote.get());
+  remotes_[MESON_OBJID_APP] = base::AsWeakPtr(remote.get());
 }
 
 APIServer::Client::~Client(void) {
 }
+
+// running in IO Thread
 void APIServer::Client::ProcessMessage(std::string msg) {
   auto val = base::JSONReader::Read(msg);
   auto json = base::DictionaryValue::From(std::move(val));
@@ -132,9 +195,9 @@ void APIServer::Client::DoCreate(base::DictionaryValue& message) {
 void APIServer::Client::PostCreate(int actionId, scoped_refptr<APIBinding> binding) {
   CHECK_CURRENTLY_ON(content::BrowserThread::IO);
   auto target = binding->GetID();
-  scoped_refptr<Remote> remote = new Remote(*this, target);
-  remotes_[target] = remote;
-  api_.SetRemote(target, remote);
+  scoped_refptr<APIClientRemote> remote = new APIClientRemote(*this, binding);
+  remotes_[target] = base::AsWeakPtr(remote.get());
+  api_.SetRemote(target, remote.get());
   std::unique_ptr<base::FundamentalValue> res(new base::FundamentalValue(static_cast<int>(target)));
   SendReply(actionId, "", std::move(res));
 }
@@ -172,8 +235,12 @@ void APIServer::Client::DoRegisterEvent(base::DictionaryValue& message) {
     ReplyToAction(actionId, "invalid id", std::unique_ptr<base::Value>());
     return;
   }
-  DCHECK((*fiter).second);
-  auto remote = (*fiter).second;
+  scoped_refptr<APIClientRemote> remote = (*fiter).second.get();
+  if (!remote) {
+    LOG(ERROR) << __PRETTY_FUNCTION__ << " : object already destroyed : " << message;
+    ReplyToAction(actionId, "inalid id", std::unique_ptr<base::Value>());
+    return;
+  }
 
   bool f = false;
   if (opt && opt->GetBoolean("delete", &f) && f) {
@@ -271,36 +338,58 @@ std::unique_ptr<base::Value> APIServer::Client::SendEventWithResult(const unsign
   return result;
 }
 
-APIServer::Client::Remote::Remote(APIServer::Client& client, unsigned int target)
-    : client_(client), target_(target) {
+APIClientRemote::APIClientRemote(APIServer::Client& client, scoped_refptr<APIBinding> binding)
+    : APIBindingRemote(binding), client_(client) {
 }
 
-void APIServer::Client::Remote::InvokeMethod(const std::string method, std::unique_ptr<api::APIArgs> args, const api::MethodCallback& callback) {
-  LOG(INFO) << "Remote::InvokeMethod(" << target_ << ", " << method << ")";
-}
-
-void APIServer::Client::Remote::EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event) {
-  DLOG(INFO) << "Remote::EmitEvent(" << target_ << ", " << type << ")";
-  int eventID = GetEventID(type);
-  if (eventID < 0) {
-    LOG(INFO) << "Remote::EmitEvent(" << target_ << ", " << type << ") : event unregisterd.";
+void APIClientRemote::RemoveBinding(meson::APIBinding* binding) {
+  LOG(INFO) << __PRETTY_FUNCTION__;
+  if (binding_.get() != binding) {
     return;
   }
-  content::BrowserThread::PostTask(content::BrowserThread::IO,
-                                   FROM_HERE,
-                                   base::Bind(&APIServer::Client::SendEvent, &client_, target_, eventID, base::Passed(&event)));
+  std::unique_ptr<base::ListValue> event;
+  EmitEvent("-deleted", std::move(event));
+  binding_ = nullptr;
 }
 
-std::unique_ptr<base::Value> APIServer::Client::Remote::EmitEventWithResult(const std::string& type, std::unique_ptr<base::ListValue> event) {
+bool APIClientRemote::InvokeMethod(const std::string method, std::unique_ptr<api::APIArgs> args, const api::MethodCallback& callback) {
+  if (!binding_) {
+    return false;
+  }
+  LOG(INFO) << "Remote::InvokeMethod(" << binding_->GetID() << ", " << method << ")";
+  //TODO: not implement yet.
+  return false;
+}
+
+void APIClientRemote::EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event) {
+  if (!binding_) {
+    // already deleted
+    return;
+  }
+  auto target = binding_->GetID();
+  DLOG(INFO) << "Remote::EmitEvent(" << target << ", " << type << ")";
   int eventID = GetEventID(type);
   if (eventID < 0) {
-    LOG(INFO) << "Remote::EmitEventWithResult(" << target_ << ", " << type << ") : event unregisterd.";
-    return std::unique_ptr<base::Value>();
+    LOG(INFO) << "Remote::EmitEvent(" << target << ", " << type << ") : event unregisterd.";
+    return;
   }
-  return client_.SendEventWithResult(target_, eventID, std::move(event));
+  client_.DoSendEvent(target, eventID, std::move(event));
 }
 
-int APIServer::Client::Remote::RegisterEvents(const std::string& event) {
+std::unique_ptr<base::Value> APIClientRemote::EmitEventWithResult(const std::string& type, std::unique_ptr<base::ListValue> event) {
+  if (!binding_) {
+    return std::unique_ptr<base::Value>();
+  }
+  auto target = binding_->GetID();
+  int eventID = GetEventID(type);
+  if (eventID < 0) {
+    LOG(INFO) << "Remote::EmitEventWithResult(" << target << ", " << type << ") : event unregisterd.";
+    return std::unique_ptr<base::Value>();
+  }
+  return client_.DoSendEventWithResult(target, eventID, std::move(event));
+}
+
+int APIClientRemote::RegisterEvents(const std::string& event) {
   CHECK_CURRENTLY_ON(content::BrowserThread::IO);
   base::subtle::AutoWriteLock locker(eventLock_);
   auto fiter = registeredEvents_.find(event);
@@ -317,7 +406,7 @@ int APIServer::Client::Remote::RegisterEvents(const std::string& event) {
   return id;
 }
 
-void APIServer::Client::Remote::UnregisterEvents(int id) {
+void APIClientRemote::UnregisterEvents(int id) {
   CHECK_CURRENTLY_ON(content::BrowserThread::IO);
   base::subtle::AutoWriteLock locker(eventLock_);
   for (auto iter = registeredEvents_.begin(); iter != registeredEvents_.end(); iter++) {
@@ -329,13 +418,13 @@ void APIServer::Client::Remote::UnregisterEvents(int id) {
   }
 }
 
-int APIServer::Client::Remote::GetEventID(const std::string& eventName) const {
+int APIClientRemote::GetEventID(const std::string& eventName) const {
   base::subtle::AutoReadLock locker(eventLock_);
   auto fiter = registeredEvents_.find(eventName);
   return (fiter != registeredEvents_.end()) ? (*fiter).second : -1;
 }
 
-std::pair<int, std::string> APIServer::Client::Remote::RegisterTemporaryEvents() {
+std::pair<int, std::string> APIClientRemote::RegisterTemporaryEvents() {
   base::subtle::AutoWriteLock locker(eventLock_);
   auto id = static_cast<int>(registeredEvents_.size()) + 1;
   if (!freeIDs_.empty()) {
@@ -350,6 +439,8 @@ std::pair<int, std::string> APIServer::Client::Remote::RegisterTemporaryEvents()
 
 APIServer::APIServer(API& api)
     : api_(api), client_(new Client(api_)) {}
+
+APIServer::~APIServer() {}
 
 void APIServer::Start() {
   DLOG(INFO) << __PRETTY_FUNCTION__;

@@ -6,4 +6,5 @@ TAGS
 /out/
 /src/app/common/chrome_version.h
 /vendor/llvm-build/
+/dist/
 *.pyc

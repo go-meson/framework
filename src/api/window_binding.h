@@ -13,12 +13,18 @@ class NativeWindow;
 class MesonWebContentsBinding;
 class MesonWindowBinding : public APIBindingT<MesonWindowBinding>, public NativeWindowObserver {
  public:
+  enum  { ObjType = MESON_OBJECT_TYPE_WINDOW };
+ public:
   MesonWindowBinding(unsigned int id, const api::APICreateArg& args);
   virtual ~MesonWindowBinding(void);
 
  public:  // Local Methods
   MethodResult LoadURL(const api::APIArgs& args);
   MethodResult Close(const api::APIArgs& args);
+  MethodResult GetWebContents(const api::APIArgs& args);
+  MethodResult OpenDevTools(const api::APIArgs& args);
+  MethodResult CloseDevTools(const api::APIArgs& args);
+  MethodResult IsDevToolsOpened(const api::APIArgs& args);
 
  public:  // NativeWindowObserver:
   void WillCloseWindow(bool* prevent_default) override;
@@ -53,6 +59,7 @@ class MesonWindowBinding : public APIBindingT<MesonWindowBinding>, public Native
 #endif
  public:
   NativeWindow* window() const { return window_.get(); }
+  bool IsFocused() const;
 
  protected:
   std::unique_ptr<NativeWindow> window_;

@@ -24,7 +24,7 @@ MesonBrowserContext::MesonBrowserContext(MesonSessionBinding* binding,
                                          bool is_memory,
                                          const base::DictionaryValue& args)
     : brightray::BrowserContext(partition, is_memory),
-      binding_(binding->GetWeakPtr()),
+      binding_(base::AsWeakPtr(binding)),
       use_cache_(true) {
   Browser* browser = Browser::Get();
   std::string name = RemoveWhitespace(browser->GetName());
@@ -41,6 +41,13 @@ MesonBrowserContext::MesonBrowserContext(MesonSessionBinding* binding,
   //TODO: mada
 
   InitPrefs();
+}
+
+content::BrowserPluginGuestManager* MesonBrowserContext::GetGuestManager() {
+  if (!guest_manager_) {
+    guest_manager_.reset(new WebViewManager);
+  }
+  return guest_manager_.get();
 }
 
 scoped_refptr<MesonBrowserContext> MesonBrowserContext::From(MesonSessionBinding* binding,

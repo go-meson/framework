@@ -2,6 +2,7 @@
 #pragma once
 
 #include <memory>
+#include <map>
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -16,6 +17,7 @@ class WebContents;
 }
 namespace meson {
 struct SetSizeParams;
+class WebViewGuestDelegate;
 class MesonWindow;
 class MesonSessionBinding;
 class MesonBrowserContext;
@@ -32,6 +34,9 @@ class MesonWebContentsBinding : public APIBindingT<MesonWebContentsBinding>,
   };
 
  public:
+  enum { ObjType = MESON_OBJECT_TYPE_WEB_CONTENTS };
+
+ public:
   MesonWebContentsBinding(unsigned int id, const api::APICreateArg& args);
   virtual ~MesonWebContentsBinding(void);
 
@@ -39,7 +44,7 @@ class MesonWebContentsBinding : public APIBindingT<MesonWebContentsBinding>,
   virtual void CallLocalMethod(const std::string& method, const api::APIArgs& args, const api::MethodCallback& callback) override;
 
  public:
-  int64_t GetID() const;
+  int64_t GetWebContentsID() const;
   int GetProcessID() const;
   Type GetType() const;
   bool Equal(const MesonWebContentsBinding* web_contents) const;
@@ -122,7 +127,13 @@ class MesonWebContentsBinding : public APIBindingT<MesonWebContentsBinding>,
 
   content::WebContents* HostWebContents();
 
-  void SetEmbedder(const MesonWebContentsBinding* embedder);
+  MesonWebContentsBinding* GetEmbedder(void) const {
+    return embedder_.get();
+  }
+  void SetEmbedder(void);
+  WebViewGuestDelegate* GetGuestDelegate() { return guest_delegate_.get(); };
+public:
+  void WebViewEmit(const std::string& type, const base::DictionaryValue& params);
 
  protected:
   // Create window with the given disposition.
@@ -194,14 +205,18 @@ class MesonWebContentsBinding : public APIBindingT<MesonWebContentsBinding>,
   void OnRendererMessage(const base::string16& channel, const base::ListValue& args);
   // Called when received a synchronous message from renderer.
   void OnRendererMessageSync(const base::string16& channel, const base::ListValue& args, IPC::Message* message);
+  void WebContentsDestroyedCore(bool destuctor);
 
  private:
-  MesonWebContentsBinding* embedder_;
+  //scoped_refptr<MesonWebContentsBinding> embedder_;
+  base::WeakPtr<MesonWebContentsBinding> embedder_;
   Type type_;
   //unsigned int request_id_;
   bool background_throttling_;
   bool enable_devtools_;
   scoped_refptr<MesonSessionBinding> session_;
+  std::unique_ptr<WebViewGuestDelegate> guest_delegate_;
+  int guest_instance_id_;
 };
 
 class MesonWebContentsBindingFactory : public APIBindingFactory {

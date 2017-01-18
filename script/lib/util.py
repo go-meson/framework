@@ -1,9 +1,15 @@
 #!/usr/bin/env python
 
+import atexit
+import contextlib
+import errno
 import os
 import subprocess
 import platform
 import re
+import shutil
+import zipfile
+import sys
 
 from config import is_verbose_mode
 
@@ -28,6 +34,34 @@ def get_host_arch():
 
     return host_arch
 
+def tempdir(prefix=''):
+  directory = tempfile.mkdtemp(prefix=prefix)
+  atexit.register(shutil.rmtree, directory)
+  return directory
+
+
+@contextlib.contextmanager
+def scoped_cwd(path):
+  cwd = os.getcwd()
+  os.chdir(path)
+  try:
+    yield
+  finally:
+    os.chdir(cwd)
+
+
+@contextlib.contextmanager
+def scoped_env(key, value):
+  origin = ''
+  if key in os.environ:
+    origin = os.environ[key]
+  os.environ[key] = value
+  try:
+    yield
+  finally:
+    os.environ[key] = origin
+
+
 def execute(argv, env=os.environ):
   if is_verbose_mode():
     print ' '.join(argv)
@@ -50,3 +84,63 @@ def execute_stdout(argv, env=os.environ):
       raise e
   else:
     execute(argv, env)
+
+def make_zip(zip_file_path, files, dirs):
+    safe_unlink(zip_file_path)
+    if sys.platform == 'darwin':
+        files += dirs
+        execute(['zip', '-r', '-y', zip_file_path] + files)
+    else:
+        zip_file = zipfile.ZipFile(zip_file_path, "w", zipfile.ZIP_DEFLATED)
+        for filename in files:
+            zip_file.write(filename, filename)
+        for dirname in dirs:
+            for root, _, filenames in os.walk(dirname):
+                for f in filenames:
+                    zip_file.write(os.path.join(root, f))
+        zip_file.close()
+
+
+def rm_rf(path):
+    try:
+        shutil.rmtree(path)
+    except OSError:
+        pass
+
+def safe_unlink(path):
+    try:
+        os.unlink(path)
+    except OSError as e:
+        if e.errno != errno.ENOENT:
+            raise
+
+def meson_gyp():
+    SOURCE_ROOT = os.path.abspath(os.path.join(__file__, '..', '..', '..'))
+    gyp = os.path.join(SOURCE_ROOT, 'meson.gyp')
+    with open(gyp) as f:
+        obj = eval(f.read());
+        return obj['variables']
+
+def get_meson_version():
+    return 'v' + meson_gyp()['version%']
+
+def parse_version(version):
+    if version[0] == 'v':
+        version = version[1:]
+
+    vs = version.split('.')
+    if len(vs) > 4:
+        return vs[0:4]
+    else:
+        return vs + ['0'] * (4 - len(vs))
+
+def import_vs_env(target_arch):
+  if sys.platform != 'win32':
+    return
+
+  if target_arch == 'ia32':
+    vs_arch = 'amd64_x86'
+  else:
+    vs_arch = 'x86_amd64'
+  env = get_vs_env('14.0', vs_arch)
+  os.environ.update(env)

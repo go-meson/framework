@@ -154,9 +154,40 @@
             ],
         },
         {
+        	'target_name': '<(project_name)_js',
+            'type': 'none',
+            'actions': [
+                {
+                    'inputs': [
+                        'src/renderer/resources/extensions/web_view.js',
+                    ],
+                    'outputs': [
+                        'src/renderer/resources/extensions/web_view.js.bin',
+                    ],
+                    'action_name': 'xxd web_view.js',
+                    'action': ['xxd', '-i',
+                               'src/renderer/resources/extensions/web_view.js',
+                               'src/renderer/resources/extensions/web_view.js.bin'],
+                },
+                {
+                    'inputs': [
+                        'src/renderer/resources/extensions/remote.js',
+                    ],
+                    'outputs': [
+                        'src/renderer/resources/extensions/remote.js.bin',
+                    ],
+                    'action_name': 'xxd remote.js',
+                    'action': ['xxd', '-i',
+                               'src/renderer/resources/extensions/remote.js',
+                               'src/renderer/resources/extensions/remote.js.bin'],
+                }
+            ],
+        },
+        {
             'target_name': '<(project_name)_lib',
             'type': 'static_library',
             'dependencies': [
+                '<(project_name)_js',
                 'vendor/brightray/brightray.gyp:brightray',
             ],
             'defines': [
@@ -167,6 +198,7 @@
                 # Defined in Chromium but not exposed in its gyp file.
                 'V8_USE_EXTERNAL_STARTUP_DATA',
                 'ENABLE_PLUGINS',
+                'ENABLE_EXTENSIONS',
                 'ENABLE_PEPPER_CDMS',
                 'USE_PROPRIETARY_CODECS',
             ],
@@ -177,6 +209,7 @@
                 './src',
                 'vendor',
                 'vendor/brightray',
+                './chromium_src',
                 # Include atom_natives.h.
                 '<(SHARED_INTERMEDIATE_DIR)',
                 '<(libchromiumcontent_src_dir)/v8/include',

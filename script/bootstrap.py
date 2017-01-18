@@ -53,7 +53,7 @@ def bootstrap_brightray(url, target_arch, libcc_source_path,
                         libcc_static_library_path):
     bootstrap = os.path.join(VENDOR_DIR, 'brightray', 'script', 'bootstrap')
     args = [
-        '--dev',                # for dev only
+        '--dev',
         '--commit', LIBCHROMIUMCONTENT_COMMIT,
         '--target_arch', target_arch,
         url,

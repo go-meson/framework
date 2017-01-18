@@ -26,7 +26,9 @@ MesonAppBinding::MesonAppBinding(unsigned int id)
   content::GpuDataManager::GetInstance()->AddObserver(this);
 #endif
 }
-MesonAppBinding::~MesonAppBinding() {}
+MesonAppBinding::~MesonAppBinding() {
+  LOG(INFO) << __PRETTY_FUNCTION__;
+}
 
 MesonAppBinding::MethodResult MesonAppBinding::Exit(const api::APIArgs& args) {
   int exitCode = 0;
@@ -106,15 +108,13 @@ MesonAppBinding::MethodResult MesonAppBinding::ShowMessageBox(const api::APIArgs
 }
 
 void MesonAppBinding::OnBeforeQuit(bool* prevent_default) {
-  //TODO:
-  *prevent_default = false;
-  EmitEvent("before-quit");
+  bool prevent = EmitPreventEvent("before-quit");
+  *prevent_default = prevent;
 }
 
 void MesonAppBinding::OnWillQuit(bool* prevent_default) {
-  //TODO:
-  *prevent_default = false;
-  EmitEvent("will-quit");
+  bool prevent = EmitPreventEvent("will-quit");
+  *prevent_default = prevent;
 }
 
 void MesonAppBinding::OnWindowAllClosed() {
@@ -125,6 +125,8 @@ void MesonAppBinding::OnQuit() {
   int exitCode = MesonMainParts::Get()->GetExitCode();
   EmitEvent("quit", exitCode);
 
+  API::Get()->RemoveBinding(this);
+
 #if 0
   if (process_singleton_.get()) {
     process_singleton_->Cleanup();
@@ -134,9 +136,8 @@ void MesonAppBinding::OnQuit() {
 }
 
 void MesonAppBinding::OnOpenFile(bool* prevent_default, const std::string& file_path) {
-  //TODO:
-  *prevent_default = false;
-  EmitEvent("open-file", file_path);
+  bool prevent = EmitPreventEvent("open-file", file_path);
+  *prevent_default = prevent;
 }
 
 void MesonAppBinding::OnOpenURL(const std::string& url) {
@@ -167,6 +168,7 @@ void MesonAppBinding::OnLogin(LoginHandler* login_handler, const base::Dictionar
   v8::Locker locker(isolate());
   v8::HandleScope handle_scope(isolate());
 #endif
+  LOG(INFO) << __PRETTY_FUNCTION__;
   //TODO:
   bool prevent_default = false;
   Emit("login",
@@ -187,9 +189,7 @@ void MesonAppBinding::OnAccessibilitySupportChanged() {
 
 #if defined(OS_MACOSX)
 void MesonAppBinding::OnContinueUserActivity(bool* prevent_default, const std::string& type, const base::DictionaryValue& user_info) {
-  //TODO:
-  *prevent_default = false;
-  EmitEvent("continue-activity", type, &user_info);
+  *prevent_default = EmitPreventEvent("continue-activity", type, &user_info);
 }
 #endif
 

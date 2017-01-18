@@ -3,6 +3,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <tuple>
 
 #include "browser/session/meson_browser_context.h"
 #include "browser/browser_main_parts.h"
@@ -41,9 +42,29 @@
 #include "ui/gfx/font_render_params.h"
 #endif
 
+#include "browser/web_view_manager.h"
+#include "api/web_contents_binding.h"
+#include "api/api.h"
+#include "browser/web_view_guest_delegate.h"
+#include "content/public/browser/render_frame_host.h"
+#include "third_party/WebKit/public/web/WebFindOptions.h"
+#include "browser/web_contents_preferences.h"
+
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(meson::NativeWindowRelay);
 
 namespace meson {
+#if 0
+//TODO:
+struct GuestInstance {
+  int elementInstanceId;
+  scoped_refptr<MesonWebContentsBinding> embedder;
+  scoped_refptr<MesonWebContentsBinding> binding;
+  base::DictionaryValue attachParams;
+  GuestInstance(scoped_refptr<MesonWebContentsBinding> e, scoped_refptr<MesonWebContentsBinding> b)
+      : elementInstanceId(-1), embedder(e), binding(b) {}
+};
+std::map<int, GuestInstance> guestInstances;
+#endif
 
 NativeWindow::NativeWindow(brightray::InspectableWebContents* inspectable_web_contents, const base::DictionaryValue& options, NativeWindow* parent)
     : content::WebContentsObserver(inspectable_web_contents->GetWebContents()),
@@ -84,6 +105,7 @@ NativeWindow::NativeWindow(brightray::InspectableWebContents* inspectable_web_co
 }
 
 NativeWindow::~NativeWindow() {
+  LOG(INFO) << __PRETTY_FUNCTION__;
   NotifyWindowClosed();
 }
 
@@ -552,7 +574,45 @@ bool NativeWindow::OnMessageReceived(const IPC::Message& message) {
 
   return handled;
 }
+bool NativeWindow::OnMessageReceived(const IPC::Message& message, content::RenderFrameHost* render_frame_host) {
+  bool handled = true;
 
+  content::WebContents* wc = web_contents();
+  WebViewManager* webviewManager = WebViewManager::GetWebViewManager(wc);
+  if (webviewManager) {
+    IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(NativeWindow, message, wc)
+      IPC_MESSAGE_UNHANDLED(handled = false)
+      IPC_MESSAGE_HANDLER(MesonFrameHostMsg_CreateWebViewGuest, OnCreateWebViewGuest)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_AttachWindowGuest, webviewManager, WebViewManager::OnAttachWindowGuest)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_DestroyWebViewGuest, webviewManager, WebViewManager::OnDestroyWebViewGuest)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestSetAutoSize, webviewManager, WebViewManager::OnWebViewGuestSetAutoSize)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestGo, webviewManager, WebViewManager::OnWebViewGuestGo)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestLoadUrl, webviewManager, WebViewManager::OnWebViewGuestLoadUrl)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestReload, webviewManager, WebViewManager::OnWebViewGuestReload)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestStop, webviewManager, WebViewManager::OnWebViewGuestStop)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestSetZoom, webviewManager, WebViewManager::OnWebViewGuestSetZoom)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestFind, webviewManager, WebViewManager::OnWebViewGuestFind)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestStopFinding, webviewManager, WebViewManager::OnWebViewGuestStopFinding)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestInsertCSS, webviewManager, WebViewManager::OnWebViewGuestInsertCSS)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestExecuteScript, webviewManager, WebViewManager::OnWebViewGuestExecuteScript)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestOpenDevTools, webviewManager, WebViewManager::OnWebViewGuestOpenDevTools)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestCloseDevTools, webviewManager, WebViewManager::OnWebViewGuestCloseDevTools)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestIsDevToolsOpened, webviewManager, WebViewManager::OnWebViewGuestIsDevToolsOpened)
+      IPC_MESSAGE_FORWARD(MesonFrameHostMsg_WebViewGuestJavaScriptDialogClosed, webviewManager, WebViewManager::OnWebViewGuestJavaScriptDialogClosed)
+    IPC_END_MESSAGE_MAP()
+  }
+#if 0
+  IPC_BEGIN_MESSAGE_MAP(NativeWindow, message)
+  IPC_END_MESSAGE_MAP()
+#endif
+  return handled;
+}
+
+void NativeWindow::OnCreateWebViewGuest(const base::DictionaryValue& params, int* guest_instance_id) {
+  LOG(INFO) << __PRETTY_FUNCTION__;
+  auto wc = web_contents();
+  WebViewManager::GetWebViewManager(wc)->OnCreateWebViewGuest(wc, params, guest_instance_id);
+}
 void NativeWindow::UpdateDraggableRegions(const std::vector<DraggableRegion>& regions) {
   // Draggable region is not supported for non-frameless window.
   if (has_frame_)

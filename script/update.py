@@ -15,8 +15,7 @@ def main():
 
 def update_gyp():
     target_arch = get_target_arch()
-    #return (run_gyp(target_arch, 0) or run_gyp(target_arch, 1))
-    return run_gyp(target_arch, 1)
+    return (run_gyp(target_arch, 0) or run_gyp(target_arch, 1))
 
 def run_gyp(target_arch, component):
     env = os.environ.copy()

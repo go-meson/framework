@@ -31,6 +31,7 @@ void MesonMainParts::PreMainMessageLoopRun(void) {
   api_server_->Start();
 }
 void MesonMainParts::PostMainMessageLoopRun() {
+  LOG(INFO) << __PRETTY_FUNCTION__;
   brightray::BrowserMainParts::PostMainMessageLoopRun();
 
 #if defined(OS_MACOSX)

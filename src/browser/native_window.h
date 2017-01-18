@@ -214,7 +214,28 @@ class NativeWindow : public base::SupportsUserData, public content::WebContentsO
   void BeforeUnloadDialogCancelled() override;
   void DidFirstVisuallyNonEmptyPaint() override;
   bool OnMessageReceived(const IPC::Message& message) override;
+  bool OnMessageReceived(const IPC::Message& message, content::RenderFrameHost* render_frame_host) override;
 
+ private:
+  void OnCreateWebViewGuest(const base::DictionaryValue& params, int* guest_instance_id);
+#if 0
+  void OnAttachWindowGuest(int internal_instance_id, int guest_instance_id, const base::DictionaryValue& params);
+  void OnDestroyWebViewGuest(int guest_instance_id);
+  void OnWebViewGuestSetAutoSize(int guest_instance_id, const base::DictionaryValue& params);
+  void OnWebViewGuestGo(int guest_instance_id, int relative_index);
+  void OnWebViewGuestLoadUrl(int guest_instance_id, const std::string& url);
+  void OnWebViewGuestReload(int guest_instance_id, bool ignore_cache);
+  void OnWebViewGuestStop(int guest_instance_id);
+  void OnWebViewGuestSetZoom(int guest_instance_id, double zoom_factor);
+  void OnWebViewGuestFind(int guest_instance_id, int request_id, const std::string& search_text, const base::DictionaryValue& options);
+  void OnWebViewGuestStopFinding(int guest_instance_id, const std::string& action);
+  void OnWebViewGuestInsertCSS(int guest_instance_id, const std::string& css);
+  void OnWebViewGuestExecuteScript(int guest_instance_id, const std::string& script);
+  void OnWebViewGuestOpenDevTools(int guest_instance_id);
+  void OnWebViewGuestCloseDevTools(int guest_instance_id);
+  void OnWebViewGuestIsDevToolsOpened(int guest_instance_id, bool* open);
+  void OnWebViewGuestJavaScriptDialogClosed(int guest_instance_id, bool success, const std::string& response);
+#endif
  private:
   void ScheduleUnresponsiveEvent(int ms);
   void NotifyWindowUnresponsive();

@@ -3,6 +3,8 @@
 #include "browser/ui/accelerator_util.h"
 #include "api/api.h"
 
+#include "api/window_binding.h"
+
 namespace meson {
 template <>
 APIBindingT<MesonMenuBinding>::MethodTable APIBindingT<MesonMenuBinding>::methodTable = {
@@ -47,9 +49,13 @@ void MesonMenuBinding::ExecuteCommand(int command_id, int flags) {
 #if 0
   execute_command_.Run(mate::internal::CreateEventFromFlags(isolate(), flags), command_id);
 #endif
+  auto focusWindow = API::Get()->FindBinding<MesonWindowBinding>([](const MesonWindowBinding& w) {
+      return w.IsFocused();
+  });
+  int focusId = focusWindow->GetID();
   auto fiter = clickEvents_.find(command_id);
   if (fiter != clickEvents_.end()) {
-    EmitEvent((*fiter).second);
+    EmitEvent((*fiter).second, focusId);
   }
 }
 
@@ -79,7 +85,7 @@ MesonMenuBinding::MethodResult MesonMenuBinding::LoadTemplate(const api::APIArgs
       DCHECK(subMenuID > 0);
       auto submenu = API::Get()->GetBinding<MesonMenuBinding>(subMenuID);
       DCHECK(submenu);
-      submenu->parent_ = this->GetWeakPtr();
+      submenu->parent_ = base::AsWeakPtr(this);
       model_->InsertSubMenuAt(idx, command_id, label, submenu->model());
     } else {
       //
@@ -162,7 +168,7 @@ MesonMenuBinding::MethodResult MesonMenuBinding::InsertSubMenuAt(const api::APIA
   args.GetString(2, &label);
   args.GetInteger(3, &menu_id);
   scoped_refptr<MesonMenuBinding> menu = static_cast<MesonMenuBinding*>(API::Get()->GetBinding(menu_id).get());
-  menu->parent_ = this->GetWeakPtr();
+  menu->parent_ = base::AsWeakPtr(this);
   model_->InsertSubMenuAt(index, command_id, label, menu->model_.get());
   return MethodResult();
 }
