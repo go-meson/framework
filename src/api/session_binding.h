@@ -6,32 +6,33 @@
 #include "browser/session/meson_browser_context.h"
 
 namespace meson {
+class SessionClassBinding;
 class MesonBrowserContext;
-class MesonSessionBinding : public APIBindingT<MesonSessionBinding> {
+class SessionBinding : public APIBindingT<SessionBinding, SessionClassBinding> {
  public:
-  MesonSessionBinding(unsigned int id, const api::APICreateArg& args);
-  virtual ~MesonSessionBinding(void);
+  SessionBinding(api::ObjID id, const base::DictionaryValue& args);
+  virtual ~SessionBinding(void);
 
  public:
   scoped_refptr<MesonBrowserContext> GetSession() const;
 
- public:
-  virtual void CallLocalMethod(const std::string& method, const api::APIArgs& args, const api::MethodCallback& callback) override;
-
  private:
   scoped_refptr<MesonBrowserContext> browser_context_;
-  DISALLOW_COPY_AND_ASSIGN(MesonSessionBinding);
+  DISALLOW_COPY_AND_ASSIGN(SessionBinding);
 };
 
-class MesonSessionFactory : public APIBindingFactory {
+class SessionClassBinding : public APIClassBindingT<SessionBinding, SessionClassBinding> {
  public:
-  MesonSessionFactory(void);
-  virtual ~MesonSessionFactory(void);
+  SessionClassBinding(void);
+  ~SessionClassBinding(void) override;
 
  public:
-  virtual APIBinding* Create(unsigned int id, const api::APICreateArg& args) override;
+  scoped_refptr<SessionBinding> NewInstance(const base::DictionaryValue& opt);
+
+ public:  // static methods
+  api::MethodResult CreateInstance(const api::APIArgs& args);
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MesonSessionFactory);
+  DISALLOW_COPY_AND_ASSIGN(SessionClassBinding);
 };
 }

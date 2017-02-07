@@ -7,7 +7,7 @@
 #include "content/public/browser/render_frame_host.h"
 
 namespace meson {
-class MesonWebContentsBinding;
+class WebContentsBinding;
 class WebViewManager : public content::BrowserPluginGuestManager {
   class GuestInstance;
   class EmbeddedClient;
@@ -53,8 +53,8 @@ class WebViewManager : public content::BrowserPluginGuestManager {
   void OnWebViewGuestJavaScriptDialogClosed(content::WebContents* web_contents, int guest_instance_id, bool success, const std::string& response);
 
  public:
-  void WatchEmbedder(scoped_refptr<MesonWebContentsBinding> embedder);
-  void OnDestroyEmbedder(MesonWebContentsBinding* embedder);
+  void WatchEmbedder(scoped_refptr<WebContentsBinding> embedder);
+  void OnDestroyEmbedder(WebContentsBinding* embedder);
 
  protected:
   // content::BrowserPluginGuestManager:

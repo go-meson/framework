@@ -1,0 +1,8 @@
+#ifndef __INC_MESON_VERSION_H__
+#define __INC_MESON_VERSION_H__
+
+#define MESON_VERSION_MAJOR		0
+#define MESON_VERSION_MINOR		0
+#define MESON_VERSION_REVISON	2
+
+#endif

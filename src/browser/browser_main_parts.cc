@@ -1,6 +1,8 @@
 #include "browser/browser_main_parts.h"
 #include "api/api_server.h"
 #include "api/api.h"
+#include "api/app_binding.h"
+#include "api/dialog_binding.h"
 #include "api/menu_binding.h"
 #include "api/session_binding.h"
 #include "api/window_binding.h"
@@ -23,10 +25,12 @@ MesonMainParts::~MesonMainParts() {}
 void MesonMainParts::PreMainMessageLoopRun(void) {
   brightray::BrowserMainParts::PreMainMessageLoopRun();
 
-  api_->InstallBindings(MESON_OBJECT_TYPE_SESSION, new MesonSessionFactory());
-  api_->InstallBindings(MESON_OBJECT_TYPE_WINDOW, new MesonWindowFactory());
-  api_->InstallBindings(MESON_OBJECT_TYPE_WEB_CONTENTS, new MesonWebContentsBindingFactory());
-  api_->InstallBindings(MESON_OBJECT_TYPE_MENU, new MesonMenuFactory());
+  api_->InstallBindings(MESON_OBJECT_TYPE_APP, new AppClassBinding());
+  api_->InstallBindings(MESON_OBJECT_TYPE_DIALOG, new DialogClassBinding());
+  api_->InstallBindings(MESON_OBJECT_TYPE_SESSION, new SessionClassBinding());
+  api_->InstallBindings(MESON_OBJECT_TYPE_WINDOW, new WindowClassBinding());
+  api_->InstallBindings(MESON_OBJECT_TYPE_WEB_CONTENTS, new WebContentsClassBinding());
+  api_->InstallBindings(MESON_OBJECT_TYPE_MENU, new MenuClassBinding());
   api_server_ = new APIServer(*api_);
   api_server_->Start();
 }

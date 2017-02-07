@@ -14,11 +14,11 @@
 #include "content/public/browser/web_contents.h"
 
 namespace meson {
-MesonMenuBindingMac::MesonMenuBindingMac(unsigned int id, const api::APICreateArg& args)
-    : MesonMenuBinding(id, args) {
+MenuBindingMac::MenuBindingMac(api::ObjID id)
+    : MenuBinding(id) {
 }
 
-void MesonMenuBindingMac::PopupAt(MesonWindowBinding* window, int x, int y, int positioning_item) {
+void MenuBindingMac::PopupAt(WindowBinding* window, int x, int y, int positioning_item) {
   NativeWindow* native_window = window->window();
   if (!native_window)
     return;
@@ -70,19 +70,34 @@ void MesonMenuBindingMac::PopupAt(MesonWindowBinding* window, int x, int y, int 
   [menu popUpMenuPositioningItem:item atLocation:position inView:view];
 }
 
-// static
-void MesonMenuBinding::SetApplicationMenu(MesonMenuBinding* base_menu) {
-  MesonMenuBindingMac* menu = static_cast<MesonMenuBindingMac*>(base_menu);
+api::MethodResult MenuClassBinding::SetApplicationMenu(const api::APIArgs& args) {
+  const base::DictionaryValue* arg1;
+  int type;
+  int id;
+  if (!args.GetDictionary(0, &arg1) ||
+      !arg1->GetInteger("type", &type) ||
+      !arg1->GetInteger("id", &id) ||
+      (MESON_OBJECT_TYPE_MENU != type)) {
+    return api::MethodResult("invalid argument");
+  }
+  auto base_menu = GetBinding(static_cast<api::ObjID>(id));
+  if (!base_menu) {
+    return api::MethodResult("invalid menu id");
+  }
+
+  MenuBindingMac* menu = static_cast<MenuBindingMac*>(base_menu.get());
   base::scoped_nsobject<MesonMenuController> menu_controller([[MesonMenuController alloc] initWithModel:menu->model_.get()
                                                                                   useDefaultAccelerator:YES]);
   [NSApp setMainMenu:[menu_controller menu]];
 
   // Ensure the menu_controller_ is destroyed after main menu is set.
   menu_controller.swap(menu->menu_controller_);
+
+  return api::MethodResult();
 }
 
 // static
-void MesonMenuBinding::SendActionToFirstResponder(const std::string& action) {
+void MenuBinding::SendActionToFirstResponder(const std::string& action) {
   SEL selector = NSSelectorFromString(base::SysUTF8ToNSString(action));
   [NSApp sendAction:selector to:nil from:[NSApp mainMenu]];
 }
@@ -94,7 +109,13 @@ mate::WrappableBase* Menu::New(mate::Arguments* args) {
 }
 #endif
 
-APIBinding* MesonMenuFactory::Create(unsigned int id, const api::APICreateArg& args) {
-  return new MesonMenuBindingMac(id, args);
+api::MethodResult MenuClassBinding::CreateInstance(const api::APIArgs& args) {
+  auto id = GetNextBindingID();
+
+  scoped_refptr<MenuBinding> binding = new MenuBindingMac(id);
+  SetBinding(id, binding);
+  LOG(INFO) << "MenuClassBinding::CreateInstance() : id:" << id;
+
+  return api::MethodResult(binding);
 }
 }

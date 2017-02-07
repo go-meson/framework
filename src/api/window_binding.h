@@ -10,22 +10,25 @@
 
 namespace meson {
 class NativeWindow;
-class MesonWebContentsBinding;
-class MesonWindowBinding : public APIBindingT<MesonWindowBinding>, public NativeWindowObserver {
+class WindowClassBinding;
+class WebContentsBinding;
+class WindowBinding : public APIBindingT<WindowBinding, WindowClassBinding>, public NativeWindowObserver {
  public:
-  enum  { ObjType = MESON_OBJECT_TYPE_WINDOW };
+  enum { ObjType = MESON_OBJECT_TYPE_WINDOW };
+
  public:
-  MesonWindowBinding(unsigned int id, const api::APICreateArg& args);
-  virtual ~MesonWindowBinding(void);
+  WindowBinding(unsigned int id, const base::DictionaryValue& args);
+  virtual ~WindowBinding(void);
 
  public:  // Local Methods
-  MethodResult LoadURL(const api::APIArgs& args);
-  MethodResult Close(const api::APIArgs& args);
-  MethodResult GetWebContents(const api::APIArgs& args);
-  MethodResult OpenDevTools(const api::APIArgs& args);
-  MethodResult CloseDevTools(const api::APIArgs& args);
-  MethodResult IsDevToolsOpened(const api::APIArgs& args);
+  api::MethodResult LoadURL(const api::APIArgs& args);
+  api::MethodResult Close(const api::APIArgs& args);
+  api::MethodResult GetWebContents(const api::APIArgs& args);
+  api::MethodResult OpenDevTools(const api::APIArgs& args);
+  api::MethodResult CloseDevTools(const api::APIArgs& args);
+  api::MethodResult IsDevToolsOpened(const api::APIArgs& args);
 
+ public:  // static metods
  public:  // NativeWindowObserver:
   void WillCloseWindow(bool* prevent_default) override;
   void WillDestroyNativeObject() override;
@@ -63,20 +66,17 @@ class MesonWindowBinding : public APIBindingT<MesonWindowBinding>, public Native
 
  protected:
   std::unique_ptr<NativeWindow> window_;
-  scoped_refptr<MesonWebContentsBinding> web_contents_;
-  scoped_refptr<MesonWindowBinding> parent_window_;
-  std::map<unsigned int, base::WeakPtr<MesonWindowBinding>> child_windows_;
+  scoped_refptr<WebContentsBinding> web_contents_;
+  scoped_refptr<WindowBinding> parent_window_;
+  std::map<unsigned int, base::WeakPtr<WindowBinding>> child_windows_;
 };
 
-class MesonWindowFactory : public APIBindingFactory {
+class WindowClassBinding : public APIClassBindingT<WindowBinding, WindowClassBinding> {
  public:
-  MesonWindowFactory(void);
-  virtual ~MesonWindowFactory(void);
+  WindowClassBinding(void);
+  ~WindowClassBinding(void) override;
 
  public:
-  virtual APIBinding* Create(unsigned int id, const api::APICreateArg& args) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MesonWindowFactory);
+  api::MethodResult CreateInstance(const api::APIArgs& args);
 };
 }

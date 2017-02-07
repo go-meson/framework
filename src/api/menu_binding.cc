@@ -7,34 +7,40 @@
 
 namespace meson {
 template <>
-APIBindingT<MesonMenuBinding>::MethodTable APIBindingT<MesonMenuBinding>::methodTable = {
-    {"loadTemplate", std::mem_fn(&MesonMenuBinding::LoadTemplate)},
-    {"insertItem", std::mem_fn(&MesonMenuBinding::InsertItemAt)},
+const APIBindingT<MenuBinding, MenuClassBinding>::MethodTable APIBindingT<MenuBinding, MenuClassBinding>::methodTable = {
+  {"loadTemplate", std::mem_fn(&MenuBinding::LoadTemplate)},
+  {"insertItem", std::mem_fn(&MenuBinding::InsertItemAt)},
+};
+template <>
+const APIClassBindingT<MenuBinding, MenuClassBinding>::MethodTable APIClassBindingT<MenuBinding, MenuClassBinding>::staticMethodTable = {
+  {"_create", std::mem_fn(&MenuClassBinding::CreateInstance)},
+  {"setApplicationMenu", std::mem_fn(&MenuClassBinding::SetApplicationMenu)},
 };
 
-MesonMenuBinding::MesonMenuBinding(unsigned int id, const api::APICreateArg& args)
-    : APIBindingT<meson::MesonMenuBinding>(MESON_OBJECT_TYPE_MENU, id),
+MESON_IMPLEMENT_API_CLASS(MenuBinding, MenuClassBinding);
+
+MenuBinding::MenuBinding(api::ObjID id)
+    : APIBindingT<MenuBinding, MenuClassBinding>(MESON_OBJECT_TYPE_MENU, id),
       model_(new MesonMenuModel(this)),
-      parent_() {
-}
+      parent_() {}
 
-MesonMenuBinding::~MesonMenuBinding() {}
+MenuBinding::~MenuBinding() {}
 
-bool MesonMenuBinding::IsCommandIdChecked(int command_id) const {
+bool MenuBinding::IsCommandIdChecked(int command_id) const {
   //return is_checked_.Run(command_id);
   return false;
 }
 
-bool MesonMenuBinding::IsCommandIdEnabled(int command_id) const {
+bool MenuBinding::IsCommandIdEnabled(int command_id) const {
   //return is_enabled_.Run(command_id);
   return true;
 }
 
-bool MesonMenuBinding::IsCommandIdVisible(int command_id) const {
+bool MenuBinding::IsCommandIdVisible(int command_id) const {
   return true;
 }
 
-bool MesonMenuBinding::GetAcceleratorForCommandIdWithParams(int command_id, bool use_default_accelerator, ui::Accelerator* accelerator) const {
+bool MenuBinding::GetAcceleratorForCommandIdWithParams(int command_id, bool use_default_accelerator, ui::Accelerator* accelerator) const {
   auto fiter = accelerators_.find(command_id);
   if (fiter != accelerators_.end()) {
     LOG(INFO) << "find_accelerator : " << command_id;
@@ -44,34 +50,33 @@ bool MesonMenuBinding::GetAcceleratorForCommandIdWithParams(int command_id, bool
   return false;
 }
 
-void MesonMenuBinding::ExecuteCommand(int command_id, int flags) {
+void MenuBinding::ExecuteCommand(int command_id, int flags) {
   LOG(INFO) << __PRETTY_FUNCTION__ << "(" << command_id << ", " << flags << ")";
-#if 0
-  execute_command_.Run(mate::internal::CreateEventFromFlags(isolate(), flags), command_id);
-#endif
-  auto focusWindow = API::Get()->FindBinding<MesonWindowBinding>([](const MesonWindowBinding& w) {
-      return w.IsFocused();
+  auto focusWindow = WindowBinding::Class().FindBinding([](const WindowBinding& w) {
+    return w.IsFocused();
   });
+  if (!focusWindow)
+    return;
   int focusId = focusWindow->GetID();
   auto fiter = clickEvents_.find(command_id);
   if (fiter != clickEvents_.end()) {
-    EmitEvent((*fiter).second, focusId);
+    EmitEvent((*fiter).second, "focusID", focusId);
   }
 }
 
-void MesonMenuBinding::MenuWillShow(ui::SimpleMenuModel* source) {
+void MenuBinding::MenuWillShow(ui::SimpleMenuModel* source) {
   LOG(INFO) << __PRETTY_FUNCTION__;
 #if 0
   menu_will_show_.Run();
 #endif
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::LoadTemplate(const api::APIArgs& args) {
+api::MethodResult MenuBinding::LoadTemplate(const api::APIArgs& args) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   for (size_t idx = 0; idx < args.GetSize(); idx++) {
     const base::DictionaryValue* item;
     if (!args.GetDictionary(idx, &item)) {
-      return MethodResult("invalid argument(not dictionary)");
+      return api::MethodResult("invalid argument(not dictionary)");
     }
     int type = MESON_MENU_TYPE_NORMAL;
     int command_id = 0;
@@ -83,7 +88,7 @@ MesonMenuBinding::MethodResult MesonMenuBinding::LoadTemplate(const api::APIArgs
       int subMenuID = -1;
       item->GetInteger("subMenuId", &subMenuID);
       DCHECK(subMenuID > 0);
-      auto submenu = API::Get()->GetBinding<MesonMenuBinding>(subMenuID);
+      auto submenu = Class().GetBinding(subMenuID);
       DCHECK(submenu);
       submenu->parent_ = base::AsWeakPtr(this);
       model_->InsertSubMenuAt(idx, command_id, label, submenu->model());
@@ -113,10 +118,10 @@ MesonMenuBinding::MethodResult MesonMenuBinding::LoadTemplate(const api::APIArgs
       clickEvents_[command_id] = clickEventName;
     }
   }
-  return MethodResult();
+  return api::MethodResult();
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::InsertItemAt(const api::APIArgs& args) {
+api::MethodResult MenuBinding::InsertItemAt(const api::APIArgs& args) {
   int index;
   int command_id;
   base::string16 label;
@@ -124,17 +129,17 @@ MesonMenuBinding::MethodResult MesonMenuBinding::InsertItemAt(const api::APIArgs
   args.GetInteger(1, &command_id);
   args.GetString(2, &label);
   model_->InsertItemAt(index, command_id, label);
-  return MethodResult();
+  return api::MethodResult();
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::InsertSeparatorAt(const api::APIArgs& args) {
+api::MethodResult MenuBinding::InsertSeparatorAt(const api::APIArgs& args) {
   int index;
   args.GetInteger(0, &index);
   model_->InsertSeparatorAt(index, ui::NORMAL_SEPARATOR);
-  return MethodResult();
+  return api::MethodResult();
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::InsertCheckItemAt(const api::APIArgs& args) {
+api::MethodResult MenuBinding::InsertCheckItemAt(const api::APIArgs& args) {
   int index;
   int command_id;
   base::string16 label;
@@ -142,10 +147,10 @@ MesonMenuBinding::MethodResult MesonMenuBinding::InsertCheckItemAt(const api::AP
   args.GetInteger(1, &command_id);
   args.GetString(2, &label);
   model_->InsertCheckItemAt(index, command_id, label);
-  return MethodResult();
+  return api::MethodResult();
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::InsertRadioItemAt(const api::APIArgs& args) {
+api::MethodResult MenuBinding::InsertRadioItemAt(const api::APIArgs& args) {
   int index;
   int command_id;
   base::string16 label;
@@ -155,10 +160,10 @@ MesonMenuBinding::MethodResult MesonMenuBinding::InsertRadioItemAt(const api::AP
   args.GetString(2, &label);
   args.GetInteger(3, &group_id);
   model_->InsertRadioItemAt(index, command_id, label, group_id);
-  return MethodResult();
+  return api::MethodResult();
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::InsertSubMenuAt(const api::APIArgs& args) {
+api::MethodResult MenuBinding::InsertSubMenuAt(const api::APIArgs& args) {
   int index;
   int command_id;
   base::string16 label;
@@ -167,145 +172,97 @@ MesonMenuBinding::MethodResult MesonMenuBinding::InsertSubMenuAt(const api::APIA
   args.GetInteger(1, &command_id);
   args.GetString(2, &label);
   args.GetInteger(3, &menu_id);
-  scoped_refptr<MesonMenuBinding> menu = static_cast<MesonMenuBinding*>(API::Get()->GetBinding(menu_id).get());
+  auto menu = Class().GetBinding(menu_id);
   menu->parent_ = base::AsWeakPtr(this);
   model_->InsertSubMenuAt(index, command_id, label, menu->model_.get());
-  return MethodResult();
+  return api::MethodResult();
 }
 
 #if 0
-void MesonMenuBinding::SetIcon(int index, const gfx::Image& image) {
+void MenuBinding::SetIcon(int index, const gfx::Image& image) {
   model_->SetIcon(index, image);
 }
 #endif
 
-MesonMenuBinding::MethodResult MesonMenuBinding::SetSublabel(const api::APIArgs& args) {
+api::MethodResult MenuBinding::SetSublabel(const api::APIArgs& args) {
   int index;
   base::string16 sublabel;
   args.GetInteger(0, &index);
   args.GetString(1, &sublabel);
   model_->SetSublabel(index, sublabel);
-  return MethodResult();
+  return api::MethodResult();
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::SetRole(const api::APIArgs& args) {
+api::MethodResult MenuBinding::SetRole(const api::APIArgs& args) {
   int index;
   base::string16 role;
   args.GetInteger(0, &index);
   args.GetString(1, &role);
   model_->SetRole(index, role);
-  return MethodResult();
+  return api::MethodResult();
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::Clear() {
+api::MethodResult MenuBinding::Clear() {
   model_->Clear();
-  return MethodResult();
+  return api::MethodResult();
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::GetIndexOfCommandId(const api::APIArgs& args) {
+api::MethodResult MenuBinding::GetIndexOfCommandId(const api::APIArgs& args) {
   int command_id;
   args.GetInteger(0, &command_id);
   int ret = model_->GetIndexOfCommandId(command_id);
-  return MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
+  return api::MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::GetItemCount() const {
+api::MethodResult MenuBinding::GetItemCount() const {
   int ret = model_->GetItemCount();
-  return MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
+  return api::MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::GetCommandIdAt(const api::APIArgs& args) const {
+api::MethodResult MenuBinding::GetCommandIdAt(const api::APIArgs& args) const {
   int index;
   args.GetInteger(0, &index);
   int ret = model_->GetCommandIdAt(index);
-  return MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
+  return api::MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::GetLabelAt(const api::APIArgs& args) const {
+api::MethodResult MenuBinding::GetLabelAt(const api::APIArgs& args) const {
   int index;
   args.GetInteger(0, &index);
   base::string16 ret = model_->GetLabelAt(index);
-  return MethodResult(std::unique_ptr<base::Value>(new base::StringValue(ret)));
+  return api::MethodResult(std::unique_ptr<base::Value>(new base::StringValue(ret)));
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::GetSublabelAt(const api::APIArgs& args) const {
+api::MethodResult MenuBinding::GetSublabelAt(const api::APIArgs& args) const {
   int index;
   args.GetInteger(0, &index);
   base::string16 ret = model_->GetSublabelAt(index);
-  return MethodResult(std::unique_ptr<base::Value>(new base::StringValue(ret)));
+  return api::MethodResult(std::unique_ptr<base::Value>(new base::StringValue(ret)));
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::IsItemCheckedAt(const api::APIArgs& args) const {
+api::MethodResult MenuBinding::IsItemCheckedAt(const api::APIArgs& args) const {
   int index;
   args.GetInteger(0, &index);
   auto ret = model_->IsItemCheckedAt(index);
-  return MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
+  return api::MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::IsEnabledAt(const api::APIArgs& args) const {
+api::MethodResult MenuBinding::IsEnabledAt(const api::APIArgs& args) const {
   int index;
   args.GetInteger(0, &index);
   auto ret = model_->IsEnabledAt(index);
-  return MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
+  return api::MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
 }
 
-MesonMenuBinding::MethodResult MesonMenuBinding::IsVisibleAt(const api::APIArgs& args) const {
+api::MethodResult MenuBinding::IsVisibleAt(const api::APIArgs& args) const {
   int index;
   args.GetInteger(0, &index);
   auto ret = model_->IsVisibleAt(index);
-  return MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
+  return api::MethodResult(std::unique_ptr<base::Value>(new base::FundamentalValue(ret)));
 }
 
-#if 0
-// static
-void Menu::BuildPrototype(v8::Isolate* isolate,
-                          v8::Local<v8::FunctionTemplate> prototype) {
-  prototype->SetClassName(mate::StringToV8(isolate, "Menu"));
-  mate::ObjectTemplateBuilder(isolate, prototype->PrototypeTemplate())
-      .MakeDestroyable()
-      .SetMethod("insertItem", &Menu::InsertItemAt)
-      .SetMethod("insertCheckItem", &Menu::InsertCheckItemAt)
-      .SetMethod("insertRadioItem", &Menu::InsertRadioItemAt)
-      .SetMethod("insertSeparator", &Menu::InsertSeparatorAt)
-      .SetMethod("insertSubMenu", &Menu::InsertSubMenuAt)
-      .SetMethod("setIcon", &Menu::SetIcon)
-      .SetMethod("setSublabel", &Menu::SetSublabel)
-      .SetMethod("setRole", &Menu::SetRole)
-      .SetMethod("clear", &Menu::Clear)
-      .SetMethod("getIndexOfCommandId", &Menu::GetIndexOfCommandId)
-      .SetMethod("getItemCount", &Menu::GetItemCount)
-      .SetMethod("getCommandIdAt", &Menu::GetCommandIdAt)
-      .SetMethod("getLabelAt", &Menu::GetLabelAt)
-      .SetMethod("getSublabelAt", &Menu::GetSublabelAt)
-      .SetMethod("isItemCheckedAt", &Menu::IsItemCheckedAt)
-      .SetMethod("isEnabledAt", &Menu::IsEnabledAt)
-      .SetMethod("isVisibleAt", &Menu::IsVisibleAt)
-      .SetMethod("popupAt", &Menu::PopupAt);
+MenuClassBinding::MenuClassBinding(void)
+    : APIClassBindingT<MenuBinding, MenuClassBinding>(MESON_OBJECT_TYPE_MENU) {
 }
-#endif
-
-MesonMenuFactory::MesonMenuFactory() {}
-MesonMenuFactory::~MesonMenuFactory() {}
+MenuClassBinding::~MenuClassBinding() {}
 }
-
-#if 0
-namespace {
-
-using atom::api::Menu;
-
-void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value> unused, v8::Local<v8::Context> context, void* priv) {
-  v8::Isolate* isolate = context->GetIsolate();
-  Menu::SetConstructor(isolate, base::Bind(&Menu::New));
-
-  mate::Dictionary dict(isolate, exports);
-  dict.Set("Menu", Menu::GetConstructor(isolate)->GetFunction());
-#if defined(OS_MACOSX)
-  dict.SetMethod("setApplicationMenu", &Menu::SetApplicationMenu);
-  dict.SetMethod("sendActionToFirstResponder",
-                 &Menu::SendActionToFirstResponder);
-#endif
-}
-
-
-}  // namespace
-#endif

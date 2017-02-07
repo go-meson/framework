@@ -19,11 +19,12 @@ namespace meson {
 struct SetSizeParams;
 class WebViewGuestDelegate;
 class MesonWindow;
-class MesonSessionBinding;
+class SessionBinding;
 class MesonBrowserContext;
-class MesonWebContentsBinding : public APIBindingT<MesonWebContentsBinding>,
-                                public CommonWebContentsDelegate,
-                                public content::WebContentsObserver {
+class WebContentsClassBinding;
+class WebContentsBinding : public APIBindingT<WebContentsBinding, WebContentsClassBinding>,
+                           public CommonWebContentsDelegate,
+                           public content::WebContentsObserver {
  public:
   enum Type {
     BACKGROUND_PAGE,  // A DevTools extension background page.
@@ -37,17 +38,14 @@ class MesonWebContentsBinding : public APIBindingT<MesonWebContentsBinding>,
   enum { ObjType = MESON_OBJECT_TYPE_WEB_CONTENTS };
 
  public:
-  MesonWebContentsBinding(unsigned int id, const api::APICreateArg& args);
-  virtual ~MesonWebContentsBinding(void);
-
- public:
-  virtual void CallLocalMethod(const std::string& method, const api::APIArgs& args, const api::MethodCallback& callback) override;
+  WebContentsBinding(api::ObjID id, const base::DictionaryValue& args);
+  virtual ~WebContentsBinding(void);
 
  public:
   int64_t GetWebContentsID() const;
   int GetProcessID() const;
   Type GetType() const;
-  bool Equal(const MesonWebContentsBinding* web_contents) const;
+  bool Equal(const WebContentsBinding* web_contents) const;
   void LoadURL(const GURL& url, const base::DictionaryValue& options);
   void DownloadURL(const GURL& url);
   GURL GetURL() const;
@@ -93,7 +91,7 @@ class MesonWebContentsBinding : public APIBindingT<MesonWebContentsBinding>,
   void Unselect();
   void Replace(const base::string16& word);
   void ReplaceMisspelling(const base::string16& word);
-  uint32_t FindInPage(base::ListValue* args);
+  size_t FindInPage(base::ListValue* args);
   void StopFindInPage(content::StopFindAction action);
   void ShowDefinitionForSelection();
   void CopyImageAt(int x, int y);
@@ -127,12 +125,13 @@ class MesonWebContentsBinding : public APIBindingT<MesonWebContentsBinding>,
 
   content::WebContents* HostWebContents();
 
-  MesonWebContentsBinding* GetEmbedder(void) const {
+  WebContentsBinding* GetEmbedder(void) const {
     return embedder_.get();
   }
   void SetEmbedder(void);
   WebViewGuestDelegate* GetGuestDelegate() { return guest_delegate_.get(); };
-public:
+
+ public:
   void WebViewEmit(const std::string& type, const base::DictionaryValue& params);
 
  protected:
@@ -207,27 +206,32 @@ public:
   void OnRendererMessageSync(const base::string16& channel, const base::ListValue& args, IPC::Message* message);
   void WebContentsDestroyedCore(bool destuctor);
 
+ public:  // Local Methods
  private:
-  //scoped_refptr<MesonWebContentsBinding> embedder_;
-  base::WeakPtr<MesonWebContentsBinding> embedder_;
+  scoped_refptr<WebContentsBinding> devtools_web_contents_;
+  base::WeakPtr<WebContentsBinding> embedder_;
   Type type_;
   //unsigned int request_id_;
   bool background_throttling_;
   bool enable_devtools_;
-  scoped_refptr<MesonSessionBinding> session_;
+  scoped_refptr<SessionBinding> session_;
   std::unique_ptr<WebViewGuestDelegate> guest_delegate_;
   int guest_instance_id_;
+  DISALLOW_COPY_AND_ASSIGN(WebContentsBinding);
 };
 
-class MesonWebContentsBindingFactory : public APIBindingFactory {
+class WebContentsClassBinding : public APIClassBindingT<WebContentsBinding, WebContentsClassBinding> {
  public:
-  MesonWebContentsBindingFactory(void);
-  virtual ~MesonWebContentsBindingFactory(void);
+  WebContentsClassBinding(void);
+  ~WebContentsClassBinding(void) override;
 
  public:
-  virtual APIBinding* Create(unsigned int id, const api::APICreateArg& args) override;
+  scoped_refptr<WebContentsBinding> NewInstance(const base::DictionaryValue& opt);
+
+ public:  // static methods
+  api::MethodResult CreateInstance(const api::APIArgs& args);
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MesonWebContentsBindingFactory);
+  DISALLOW_COPY_AND_ASSIGN(WebContentsClassBinding);
 };
 }

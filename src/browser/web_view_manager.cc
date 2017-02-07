@@ -16,14 +16,14 @@
 namespace meson {
 class IWebViewClient {
  public:
-  virtual void EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event) = 0;
+  virtual void EmitEvent(scoped_refptr<api::EventArg> event) = 0;
 };
 
 class WebViewBindingRemote : public APIBindingRemote {
   IWebViewClient& client_;
 
  public:
-  WebViewBindingRemote(IWebViewClient& client, scoped_refptr<MesonWebContentsBinding> c)
+  WebViewBindingRemote(IWebViewClient& client, scoped_refptr<WebContentsBinding> c)
       : APIBindingRemote(c), client_(client) {
     LOG(INFO) << __PRETTY_FUNCTION__ << " : " << Binding()->GetID();
   }
@@ -37,13 +37,13 @@ class WebViewBindingRemote : public APIBindingRemote {
     //TODO: need implement?
     return false;
   }
-  void EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event) override {
+  void EmitEvent(scoped_refptr<api::EventArg> event) override {
     if (!binding_) {
       return;
     }
-    client_.EmitEvent(type, std::move(event));
+    client_.EmitEvent(event);
   }
-  std::unique_ptr<base::Value> EmitEventWithResult(const std::string& type, std::unique_ptr<base::ListValue> event) override {
+  std::unique_ptr<base::Value> EmitEventWithResult(scoped_refptr<api::EventArg> event) override {
     //TODO:
     return std::unique_ptr<base::Value>();
   }
@@ -55,24 +55,24 @@ class WebViewManager::EmbeddedClient final : public base::RefCountedThreadSafe<E
   scoped_refptr<WebViewBindingRemote> remote_;
 
 public:
-  EmbeddedClient(WebViewManager& m, scoped_refptr<MesonWebContentsBinding> c)
+  EmbeddedClient(WebViewManager& m, scoped_refptr<WebContentsBinding> c)
       : mgr_(m),
         binding_id_(c->GetID()),
         remote_(make_scoped_refptr(new WebViewBindingRemote(*this, c))) {
     LOG(INFO) << __PRETTY_FUNCTION__ << " : " << binding_id_;
-    API::Get()->SetRemote(c->GetID(), remote_.get());
+    WebContentsBinding::Class().SetRemote(c->GetID(), remote_.get());
   }
 
   ~EmbeddedClient() {
     LOG(INFO) << __PRETTY_FUNCTION__ << " (" << (long )this;
     //LOG(INFO) << __PRETTY_FUNCTION__ << " : " << binding_->GetID();
-    API::Get()->RemoveRemote(binding_id_, remote_.get());
+    WebContentsBinding::Class().RemoveRemote(binding_id_, remote_.get());
   }
-  void EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event) override {
-    LOG(INFO) << __PRETTY_FUNCTION__ << " : " << type;
+  void EmitEvent(scoped_refptr<api::EventArg> event) override {
+    LOG(INFO) << __PRETTY_FUNCTION__ << " : " << event->name_;
     static const char* destroyEvents[] = {"will-destroy", "crashed", "did-navigate"};
-    if (std::find(std::begin(destroyEvents), std::end(destroyEvents), type) != std::end(destroyEvents)) {
-      auto binding = API::Get()->GetBinding<MesonWebContentsBinding>(binding_id_);
+    if (std::find(std::begin(destroyEvents), std::end(destroyEvents), event->name_) != std::end(destroyEvents)) {
+      auto binding = WebContentsBinding::Class().GetBinding(binding_id_);
       if (binding) {
         mgr_.OnDestroyEmbedder(binding.get());
       }
@@ -96,7 +96,7 @@ class WebViewManager::GuestInstance final : public base::RefCountedThreadSafe<Gu
   bool allowPopups;
 
  public:
-  GuestInstance(WebViewManager& m, int giid, scoped_refptr<MesonWebContentsBinding> c)
+  GuestInstance(WebViewManager& m, int giid, scoped_refptr<WebContentsBinding> c)
       : mgr_(m),
         binding_id_(c->GetID()),
         guestInstanceId(giid),
@@ -104,24 +104,24 @@ class WebViewManager::GuestInstance final : public base::RefCountedThreadSafe<Gu
         remote_(make_scoped_refptr(new WebViewBindingRemote(*this, c))),
         allowPopups(false) {
     LOG(INFO) << __PRETTY_FUNCTION__ << " : " << binding_id_;
-    API::Get()->SetRemote(c->GetID(), remote_.get());
+    WebContentsBinding::Class().SetRemote(c->GetID(), remote_.get());
   }
   ~GuestInstance() {
     LOG(INFO) << __PRETTY_FUNCTION__ << " : " << binding_id_;
-    API::Get()->RemoveRemote(binding_id_, remote_.get());
+    WebContentsBinding::Class().RemoveRemote(binding_id_, remote_.get());
   }
 
  public:
-  scoped_refptr<MesonWebContentsBinding> Binding() const { return API::Get()->GetBinding<MesonWebContentsBinding>(binding_id_); }
+  scoped_refptr<WebContentsBinding> Binding() const { return WebContentsBinding::Class().GetBinding(binding_id_); }
 
  public:
-  void EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event) override {
-    LOG(INFO) << __PRETTY_FUNCTION__ << "[" << guestInstanceId << "] : " << type;
-    if (type == "did-attach") {
+  void EmitEvent(scoped_refptr<api::EventArg> event) override {
+    auto& name = event->name_;
+    LOG(INFO) << __PRETTY_FUNCTION__ << "[" << guestInstanceId << "] : " << name;
+    if (name == "did-attach") {
       OnDidAttach();
     }
-    //TODO: pass event to client?
-    //Binding()->WebViewEmit(type, *event);
+    Binding()->WebViewEmit(name, *event->event_);
   }
 
  private:
@@ -258,7 +258,7 @@ WebViewManager* WebViewManager::GetWebViewManager(content::WebContents* web_cont
 bool WebViewManager::OnMessageReceived(const IPC::Message& message, content::WebContents* web_contents) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(WebViewManager, message, web_contents)
-    IPC_MESSAGE_UNHANDLED(handled = false)
+    IPC_MESSAGE_UNHANDLED(hancdled = false)
     IPC_MESSAGE_HANDLER(MesonFrameHostMsg_CreateWebViewGuest, OnCreateWebViewGuest)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -276,13 +276,13 @@ void WebViewManager::OnCreateWebViewGuest(content::WebContents* web_contents, co
     opt->SetString("partition", partition);
   }
 
-  auto parentapi = API::Get()->FindBinding<MesonWebContentsBinding>([web_contents](const MesonWebContentsBinding& b) {
+  auto parentapi = WebContentsBinding::Class().FindBinding([web_contents](const WebContentsBinding& b) {
     return b.GetWebContents() == web_contents;
   });
   CHECK(parentapi) << "Parent api is not found!";
   WatchEmbedder(parentapi.get());
   opt->SetInteger("embedder", parentapi->GetID());
-  auto api = API::Get()->Create<MesonWebContentsBinding>(MESON_OBJECT_TYPE_WEB_CONTENTS, *opt);
+  auto api = static_cast<WebContentsClassBinding&>(WebContentsBinding::Class()).NewInstance(*opt);
 
   auto client = make_scoped_refptr(new GuestInstance(*this, guestInstanceId, api));
   guest_instances_[guestInstanceId] = client;
@@ -550,7 +550,7 @@ void WebViewManager::OnWebViewGuestJavaScriptDialogClosed(content::WebContents* 
   //auto api = (*fiter).second;
 }
 
-void WebViewManager::WatchEmbedder(scoped_refptr<MesonWebContentsBinding> embedder) {
+void WebViewManager::WatchEmbedder(scoped_refptr<WebContentsBinding> embedder) {
   LOG(INFO) << __PRETTY_FUNCTION__ << " : " << embedder->GetID();
   unsigned int embedder_id = embedder->GetID();
   auto fiter = embedded_clients_.find(embedder_id);
@@ -562,7 +562,7 @@ void WebViewManager::WatchEmbedder(scoped_refptr<MesonWebContentsBinding> embedd
   embedded_clients_[embedder_id] = client;
 }
 
-void WebViewManager::OnDestroyEmbedder(MesonWebContentsBinding* embedder) {
+void WebViewManager::OnDestroyEmbedder(WebContentsBinding* embedder) {
   LOG(INFO) << __PRETTY_FUNCTION__ << " : " << embedder->GetID();
   auto emb = make_scoped_refptr(embedder);
   unsigned int embedder_id = emb->GetID();

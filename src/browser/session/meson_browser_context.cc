@@ -19,7 +19,7 @@ static std::string RemoveWhitespace(const std::string& str) {
 }
 
 namespace meson {
-MesonBrowserContext::MesonBrowserContext(MesonSessionBinding* binding,
+MesonBrowserContext::MesonBrowserContext(SessionBinding* binding,
                                          const std::string& partition,
                                          bool is_memory,
                                          const base::DictionaryValue& args)
@@ -50,7 +50,7 @@ content::BrowserPluginGuestManager* MesonBrowserContext::GetGuestManager() {
   return guest_manager_.get();
 }
 
-scoped_refptr<MesonBrowserContext> MesonBrowserContext::From(MesonSessionBinding* binding,
+scoped_refptr<MesonBrowserContext> MesonBrowserContext::From(SessionBinding* binding,
                                                              const std::string& partition,
                                                              bool is_memory,
                                                              const base::DictionaryValue& args) {

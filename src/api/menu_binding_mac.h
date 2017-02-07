@@ -5,17 +5,17 @@
 #import "browser/ui/cocoa/meson_menu_controller.h"
 
 namespace meson {
-  class MesonMenuBindingMac : public MesonMenuBinding {
+  class MenuBindingMac : public MenuBinding {
   public:
-    MesonMenuBindingMac(unsigned int id, const api::APICreateArg& args);
+    MenuBindingMac(api::ObjID id);
 
-    void PopupAt(MesonWindowBinding* window, int x, int y, int positioning_item) override;
+    void PopupAt(WindowBinding* window, int x, int y, int positioning_item) override;
 
     base::scoped_nsobject<MesonMenuController> menu_controller_;
   private:
     static void SendActionToFirstResponder(const std::string& action);
 
-    DISALLOW_COPY_AND_ASSIGN(MesonMenuBindingMac);
+    DISALLOW_COPY_AND_ASSIGN(MenuBindingMac);
   };
 }
 

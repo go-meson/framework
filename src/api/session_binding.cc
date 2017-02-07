@@ -9,10 +9,21 @@ const char kPersistPrefix[] = "persist:";
 
 namespace meson {
 template <>
-APIBindingT<MesonSessionBinding>::MethodTable APIBindingT<MesonSessionBinding>::methodTable = {};
+const APIBindingT<SessionBinding, SessionClassBinding>::MethodTable APIBindingT<SessionBinding, SessionClassBinding>::methodTable = {};
 
-MesonSessionBinding::MesonSessionBinding(unsigned int id, const api::APICreateArg& args)
+template <>
+const APIClassBindingT<SessionBinding, SessionClassBinding>::MethodTable APIClassBindingT<SessionBinding, SessionClassBinding>::staticMethodTable = {
+    {"_create", std::mem_fn(&SessionClassBinding::CreateInstance)},
+};
+
+MESON_IMPLEMENT_API_CLASS(SessionBinding, SessionClassBinding);
+
+// TODO: constructorと初期化を分割すべきか？
+SessionBinding::SessionBinding(api::ObjID id, const base::DictionaryValue& args)
     : APIBindingT(MESON_OBJECT_TYPE_SESSION, id) {
+  if (id == MESON_OBJID_STATIC) {
+    return;
+  }
   std::string partition;
   args.GetString("partition", &partition);
   const base::DictionaryValue* opt = nullptr;
@@ -31,19 +42,26 @@ MesonSessionBinding::MesonSessionBinding(unsigned int id, const api::APICreateAr
     browser_context_ = MesonBrowserContext::From(this, partition, true, *opt);
   }
 }
-MesonSessionBinding::~MesonSessionBinding(void) {}
+SessionBinding::~SessionBinding(void) {}
 
-scoped_refptr<MesonBrowserContext> MesonSessionBinding::GetSession() const {
+scoped_refptr<MesonBrowserContext> SessionBinding::GetSession() const {
   return browser_context_;
 }
-void MesonSessionBinding::CallLocalMethod(const std::string& method, const api::APIArgs& args, const api::MethodCallback& callback) {
-  LOG(INFO) << __PRETTY_FUNCTION__;
-  DCHECK(FALSE) << "not implement yet";
+
+SessionClassBinding::SessionClassBinding(void)
+    : APIClassBindingT(MESON_OBJECT_TYPE_SESSION) {}
+SessionClassBinding::~SessionClassBinding(void) {}
+
+scoped_refptr<SessionBinding> SessionClassBinding::NewInstance(const base::DictionaryValue& opt) {
+  auto id = GetNextBindingID();
+  scoped_refptr<SessionBinding> binding(new SessionBinding(id, opt));
+  SetBinding(id, binding);
+  return binding;
 }
 
-MesonSessionFactory::MesonSessionFactory(void) {}
-MesonSessionFactory::~MesonSessionFactory(void) {}
-APIBinding* MesonSessionFactory::Create(unsigned int id, const api::APICreateArg& args) {
-  return new MesonSessionBinding(id, args);
+api::MethodResult SessionClassBinding::CreateInstance(const api::APIArgs& args) {
+  const base::DictionaryValue* opt;
+  args.GetDictionary(0, &opt);
+  return api::MethodResult(NewInstance(*opt));
 }
 }

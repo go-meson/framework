@@ -29,7 +29,7 @@ WebViewGuestDelegate::~WebViewGuestDelegate() {
   LOG(INFO) << __PRETTY_FUNCTION__;
 }
 
-void WebViewGuestDelegate::Initialize(MesonWebContentsBinding* api_web_contents) {
+void WebViewGuestDelegate::Initialize(WebContentsBinding* api_web_contents) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   api_web_contents_ = api_web_contents;
   Observe(api_web_contents->GetWebContents());
@@ -102,7 +102,7 @@ void WebViewGuestDelegate::DidFinishNavigation(content::NavigationHandle* naviga
     auto is_main_frame = navigation_handle->IsInMainFrame();
     auto url = navigation_handle->GetURL();
 
-    api_web_contents_->EmitEvent("load-commit", url, is_main_frame);
+    api_web_contents_->EmitEvent("load-commit", "url", url, "isMainFrame", is_main_frame);
   }
 }
 
@@ -143,8 +143,8 @@ void WebViewGuestDelegate::GuestSizeChangedDueToAutoSize(const gfx::Size& old_si
                                                          const gfx::Size& new_size) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   api_web_contents_->EmitEvent("size-changed",
-                               old_size.width(), old_size.height(),
-                               new_size.width(), new_size.height());
+                               "oldSize", old_size,
+                               "newSize", new_size);
 }
 
 gfx::Size WebViewGuestDelegate::GetDefaultSize() const {

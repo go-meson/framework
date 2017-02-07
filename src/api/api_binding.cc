@@ -1,32 +1,31 @@
 #include "api/api_binding.h"
-#include "api/api.h"
 
 namespace meson {
-APIBinding::APIBinding(MESON_OBJECT_TYPE type, unsigned int id)
+APIBinding::APIBinding(MESON_OBJECT_TYPE type, api::ObjID id)
     : type_(type), id_(id) {}
 
 APIBinding::~APIBinding(void) {}
 
 void APIBinding::InvokeRemoteMethod(const std::string& method, std::unique_ptr<api::APIArgs> args, const api::MethodCallback& callback) {
-  auto remote = API::Get()->GetRemote(id_);
+  auto remote = GetRemote(GetID());
   if (remote) {
     remote->InvokeMethod(method, std::move(args), callback);
   }
 }
-void APIBinding::EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event) {
-  auto remote = API::Get()->GetRemote(id_);
+void APIBinding::EmitEvent(const std::string& type, std::unique_ptr<base::DictionaryValue> event) {
+  auto remote = GetRemote(GetID());
   DLOG(INFO) << __PRETTY_FUNCTION__ << " : " << (int64_t)id_ << ", " << *event;
   if (remote) {
-    remote->EmitEvent(type, std::move(event));
+    remote->EmitEvent(make_scoped_refptr(new api::EventArg(type, std::move(event))));
   }
 }
-std::unique_ptr<base::Value> APIBinding::EmitEventWithResult(const std::string& event_type, std::unique_ptr<base::ListValue> event) {
-  auto remote = API::Get()->GetRemote(id_);
+std::unique_ptr<base::Value> APIBinding::EmitEventWithResult(const std::string& event_type, std::unique_ptr<base::DictionaryValue> event) {
+  auto remote = GetRemote(id_);
   DLOG(INFO) << __PRETTY_FUNCTION__ << " : " << (int64_t)id_ << ", " << *event;
   if (!remote) {
     return std::unique_ptr<base::Value>();
   }
-  return remote->EmitEventWithResult(event_type, std::move(event));
+  return remote->EmitEventWithResult(make_scoped_refptr(new api::EventArg(event_type, std::move(event))));
 }
 
 APIBindingRemoteList::APIBindingRemoteList() {}
@@ -80,23 +79,19 @@ void APIBindingRemoteList::InvokeMethod(const std::string method, std::unique_pt
     }
   }
 }
-void APIBindingRemoteList::EmitEvent(const std::string& type, std::unique_ptr<base::ListValue> event) {
+void APIBindingRemoteList::EmitEvent(scoped_refptr<api::EventArg> event) {
   std::vector<scoped_refptr<APIBindingRemote>> remotes;
   std::copy(remotes_.begin(), remotes_.end(), std::back_inserter(remotes));
   for (auto& remote : remotes) {
-    //TODO: unique_ptr渡しを止める
-    std::unique_ptr<base::ListValue> e(event->DeepCopy());
-    remote->EmitEvent(type, std::move(e));
+    remote->EmitEvent(event);
   }
 }
 
-std::unique_ptr<base::Value> APIBindingRemoteList::EmitEventWithResult(const std::string& type, std::unique_ptr<base::ListValue> event) {
+std::unique_ptr<base::Value> APIBindingRemoteList::EmitEventWithResult(scoped_refptr<api::EventArg> event) {
   std::vector<scoped_refptr<APIBindingRemote>> remotes;
   std::copy(remotes_.begin(), remotes_.end(), std::back_inserter(remotes));
   for (auto& remote : remotes) {
-    //TODO: unique_ptr渡しを止める
-    std::unique_ptr<base::ListValue> e(event->DeepCopy());
-    auto ret = remote->EmitEventWithResult(type, std::move(e));
+    auto ret = remote->EmitEventWithResult(event);
     if (ret) {
       return ret;
     }

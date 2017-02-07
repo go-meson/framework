@@ -5,18 +5,16 @@
 #include "browser/browser_observer.h"
 
 namespace meson {
-class MesonAppBinding : public APIBindingT<MesonAppBinding>,
+class AppClassBinding : public APIClassBindingT<AppClassBinding, AppClassBinding>,
                         public MesonBrowserClient::Delegate,
                         public BrowserObserver {
  public:
-  MesonAppBinding(unsigned int id);
-  virtual ~MesonAppBinding(void);
+  AppClassBinding(void);
+  ~AppClassBinding(void) override;
 
  public:  // Local Methods
-  MethodResult Exit(const api::APIArgs& args);
-  MethodResult SetApplicationMenu(const api::APIArgs& args);
-  MethodResult ShowMessageBox(const api::APIArgs& args);
-  void ShowMessageBoxCallback(const std::string& eventName, int buttonId);
+  api::MethodResult Exit(const api::APIArgs& args);
+
  public:  // BrowserObserver
   void OnBeforeQuit(bool* prevent_default) override;
   void OnWillQuit(bool* prevent_default) override;
@@ -54,5 +52,7 @@ class MesonAppBinding : public APIBindingT<MesonAppBinding>,
 
  private:
   bool IsAccessibilitySupportEnabled();
+
+  DISALLOW_COPY_AND_ASSIGN(AppClassBinding);
 };
 }

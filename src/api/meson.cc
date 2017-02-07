@@ -42,7 +42,7 @@ char* mesonApiCallWaitServerRequestHandler(void) {
   return (*s_pfnWaitServerRequestHandler)();
 }
 
-char* mesonApiPostServerResponseHandler(unsigned int id, const char* msg, bool needReply /* = false */) {
+char* mesonApiPostServerResponseHandler( unsigned int id, const char* msg, bool needReply /* = false */) {
   if (!s_pfnPostServerResponseHandler) {
     return nullptr;
   }

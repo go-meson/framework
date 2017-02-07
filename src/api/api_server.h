@@ -4,6 +4,7 @@
 #include <memory>
 #include <map>
 #include <set>
+#include <array>
 #include "base/memory/ref_counted.h"
 #include "base/files/file_path.h"
 #include "base/synchronization/read_write_lock.h"

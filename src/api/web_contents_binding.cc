@@ -12,6 +12,7 @@
 #include "browser/browser_client.h"
 #include "common/options_switches.h"
 #include "common/color_util.h"
+#include "common/mouse_util.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -21,6 +22,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/public/browser/resource_request_details.h"
+#include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/favicon_status.h"
@@ -35,15 +37,24 @@
 
 namespace meson {
 template <>
-APIBindingT<MesonWebContentsBinding>::MethodTable APIBindingT<MesonWebContentsBinding>::methodTable = {};
+const APIBindingT<WebContentsBinding, WebContentsClassBinding>::MethodTable APIBindingT<WebContentsBinding, WebContentsClassBinding>::methodTable = {};
+template <>
+const APIClassBindingT<WebContentsBinding, WebContentsClassBinding>::MethodTable APIClassBindingT<WebContentsBinding, WebContentsClassBinding>::staticMethodTable = {
+    {"_create", std::mem_fn(&WebContentsClassBinding::CreateInstance)},
+};
 
-MesonWebContentsBinding::MesonWebContentsBinding(unsigned int id, const api::APICreateArg& args)
+MESON_IMPLEMENT_API_CLASS(WebContentsBinding, WebContentsClassBinding);
+
+WebContentsBinding::WebContentsBinding(api::ObjID id, const base::DictionaryValue& args)
     : APIBindingT(MESON_OBJECT_TYPE_WEB_CONTENTS, id),
       embedder_(nullptr),
       type_(BROWSER_WINDOW),
       /*request_id_(0),*/ background_throttling_(true),
       enable_devtools_(true),
       guest_instance_id_(-1) {
+  if (id == MESON_OBJID_STATIC) {
+    return;
+  }
   args.GetBoolean("backgroundThrottling", &background_throttling_);
 
   bool b = false;
@@ -58,14 +69,14 @@ MesonWebContentsBinding::MesonWebContentsBinding(unsigned int id, const api::API
 
   int session_id;
   if (args.GetInteger("_session_id_", &session_id)) {
-    session_ = static_cast<MesonSessionBinding*>(API::Get()->GetBinding(session_id).get());
+    session_ = SessionBinding::Class().GetBinding(session_id);
   } else {
     base::DictionaryValue sessionArg;
     std::string partition;
     if (args.GetString("partition", &partition)) {
       sessionArg.SetString("partition", partition);
     }
-    session_ = API::Get()->Create<MesonSessionBinding>(MESON_OBJECT_TYPE_SESSION, sessionArg);
+    session_ = static_cast<SessionClassBinding&>(SessionBinding::Class()).NewInstance(sessionArg);
   }
   content::WebContents* web_contents;
   if (IsGuest()) {
@@ -115,7 +126,7 @@ MesonWebContentsBinding::MesonWebContentsBinding(unsigned int id, const api::API
     int embed_id;
     if (args.GetInteger("embedder", &embed_id) && (embed_id != 0)) {
       //TODO: do embedder_ to WeakPtr?
-      auto e = API::Get()->GetBinding<MesonWebContentsBinding>(embed_id);
+      auto e = WebContentsBinding::Class().GetBinding(embed_id);
       embedder_ = base::AsWeakPtr(e.get());
       CHECK(embedder_) << "Embedder not found";
       // New WebContents's owner_window is the embedder's owner_window.
@@ -129,7 +140,7 @@ MesonWebContentsBinding::MesonWebContentsBinding(unsigned int id, const api::API
   //AttachAsUserData(web_contents);
 }
 
-MesonWebContentsBinding::~MesonWebContentsBinding(void) {
+WebContentsBinding::~WebContentsBinding(void) {
   LOG(INFO) << __PRETTY_FUNCTION__ << " : " << managed_web_contents();
   if (managed_web_contents()) {
     if (type_ == WEB_VIEW)
@@ -138,42 +149,52 @@ MesonWebContentsBinding::~MesonWebContentsBinding(void) {
     WebContentsDestroyedCore(true);
   }
 }
-void MesonWebContentsBinding::CallLocalMethod(const std::string& method, const api::APIArgs& args, const api::MethodCallback& callback) {
-}
 
-MesonBrowserContext* MesonWebContentsBinding::GetBrowserContext() const {
+MesonBrowserContext* WebContentsBinding::GetBrowserContext() const {
   return static_cast<MesonBrowserContext*>(web_contents()->GetBrowserContext());
 }
 
-bool MesonWebContentsBinding::AddMessageToConsole(content::WebContents* source,
-                                                  int32_t level,
-                                                  const base::string16& message,
-                                                  int32_t line_no,
-                                                  const base::string16& source_id) {
+bool WebContentsBinding::AddMessageToConsole(content::WebContents* source,
+                                             int32_t level,
+                                             const base::string16& message,
+                                             int32_t line_no,
+                                             const base::string16& source_id) {
   if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN) {
     return false;
   } else {
-    EmitEvent("console-message", level, message, line_no, source_id);
+    EmitEvent("console-message",
+              "level", level,
+              "message", message,
+              "lineNO", line_no,
+              "sourceID", source_id);
     return true;
   }
 }
 
-void MesonWebContentsBinding::OnCreateWindow(const GURL& target_url,
-                                             const std::string& frame_name,
-                                             WindowOpenDisposition disposition,
-                                             const std::vector<base::string16>& features) {
+void WebContentsBinding::OnCreateWindow(const GURL& target_url,
+                                        const std::string& frame_name,
+                                        WindowOpenDisposition disposition,
+                                        const std::vector<base::string16>& features) {
   LOG(INFO) << __PRETTY_FUNCTION__ << " : " << type_;
   if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN)
-    EmitEvent("-new-window", target_url, frame_name, disposition, features);
+    EmitEvent("-new-window",
+              "url", target_url,
+              "frameName", frame_name,
+              "disposition", disposition,
+              "features", features);
   else
-    EmitEvent("new-window", target_url, frame_name, disposition, features);
+    EmitEvent("new-window",
+              "url", target_url,
+              "frameName", frame_name,
+              "disposition", disposition,
+              "features", features);
 }
 
-void MesonWebContentsBinding::WebContentsCreated(content::WebContents* source_contents,
-                                                 int opener_render_frame_id,
-                                                 const std::string& frame_name,
-                                                 const GURL& target_url,
-                                                 content::WebContents* new_contents) {
+void WebContentsBinding::WebContentsCreated(content::WebContents* source_contents,
+                                            int opener_render_frame_id,
+                                            const std::string& frame_name,
+                                            const GURL& target_url,
+                                            content::WebContents* new_contents) {
   LOG(INFO) << __PRETTY_FUNCTION__ << " : " << target_url.spec();
 #if 0
   v8::Locker locker(isolate());
@@ -183,15 +204,18 @@ void MesonWebContentsBinding::WebContentsCreated(content::WebContents* source_co
   auto api_web_contents = GetID();
 #endif
   std::string url = target_url.spec();
-  EmitEvent("-web-contents-created", static_cast<int>(api_web_contents), url, frame_name);
+  EmitEvent("-web-contents-created",
+            "id", static_cast<int>(api_web_contents),
+            "url", url,
+            "frameName", frame_name);
 }
 
-void MesonWebContentsBinding::AddNewContents(content::WebContents* source,
-                                             content::WebContents* new_contents,
-                                             WindowOpenDisposition disposition,
-                                             const gfx::Rect& initial_rect,
-                                             bool user_gesture,
-                                             bool* was_blocked) {
+void WebContentsBinding::AddNewContents(content::WebContents* source,
+                                        content::WebContents* new_contents,
+                                        WindowOpenDisposition disposition,
+                                        const gfx::Rect& initial_rect,
+                                        bool user_gesture,
+                                        bool* was_blocked) {
   LOG(INFO) << __PRETTY_FUNCTION__;
 #if 0
   v8::Locker locker(isolate());
@@ -200,35 +224,41 @@ void MesonWebContentsBinding::AddNewContents(content::WebContents* source,
 #else
   int api_web_contents = GetID();
 #endif
-  EmitEvent("-add-new-contents", api_web_contents, disposition, user_gesture,
-            initial_rect.x(), initial_rect.y(), initial_rect.width(),
-            initial_rect.height());
+  EmitEvent("-add-new-contents",
+            "id", api_web_contents,
+            "disposition", disposition,
+            "userGesture", user_gesture,
+            "initialRect", initial_rect);
 }
 
-content::WebContents* MesonWebContentsBinding::OpenURLFromTab(content::WebContents* source,
-                                                              const content::OpenURLParams& params) {
+content::WebContents* WebContentsBinding::OpenURLFromTab(content::WebContents* source,
+                                                         const content::OpenURLParams& params) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   if (params.disposition != CURRENT_TAB) {
     if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN)
-      EmitEvent("-new-window", params.url, "", params.disposition);
+      EmitEvent("-new-window",
+                "url", params.url,
+                "frameName", "",
+                "disposition", params.disposition);
     else
-      EmitEvent("new-window", params.url, "", params.disposition);
+      EmitEvent("new-window",
+                "url", params.url,
+                "frameName", "",
+                "disposition", params.disposition);
     return nullptr;
   }
 
   // Give user a chance to cancel navigation.
-  bool prevent = false;
-  //TODO:
-  EmitEvent("will-navigate", params.url);
+  bool prevent = EmitPreventEvent("will-navigate", "url", params.url);
   if (prevent)
     return nullptr;
 
   return CommonWebContentsDelegate::OpenURLFromTab(source, params);
 }
 
-void MesonWebContentsBinding::BeforeUnloadFired(content::WebContents* tab,
-                                                bool proceed,
-                                                bool* proceed_to_fire_unload) {
+void WebContentsBinding::BeforeUnloadFired(content::WebContents* tab,
+                                           bool proceed,
+                                           bool* proceed_to_fire_unload) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN)
     *proceed_to_fire_unload = proceed;
@@ -236,13 +266,13 @@ void MesonWebContentsBinding::BeforeUnloadFired(content::WebContents* tab,
     *proceed_to_fire_unload = true;
 }
 
-void MesonWebContentsBinding::MoveContents(content::WebContents* source,
-                                           const gfx::Rect& pos) {
+void WebContentsBinding::MoveContents(content::WebContents* source,
+                                      const gfx::Rect& pos) {
   LOG(INFO) << __PRETTY_FUNCTION__;
-  EmitEvent("move", pos);
+  EmitEvent("move", "position", pos);
 }
 
-void MesonWebContentsBinding::CloseContents(content::WebContents* source) {
+void WebContentsBinding::CloseContents(content::WebContents* source) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   EmitEvent("close");
 
@@ -251,21 +281,21 @@ void MesonWebContentsBinding::CloseContents(content::WebContents* source) {
   }
 }
 
-void MesonWebContentsBinding::ActivateContents(content::WebContents* source) {
+void WebContentsBinding::ActivateContents(content::WebContents* source) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   EmitEvent("activate");
 }
 
-void MesonWebContentsBinding::UpdateTargetURL(content::WebContents* source, const GURL& url) {
+void WebContentsBinding::UpdateTargetURL(content::WebContents* source, const GURL& url) {
   LOG(INFO) << __PRETTY_FUNCTION__;
-  EmitEvent("update-target-url", url);
+  EmitEvent("update-target-url", "url", url);
 }
 
-bool MesonWebContentsBinding::IsPopupOrPanel(const content::WebContents* source) const {
+bool WebContentsBinding::IsPopupOrPanel(const content::WebContents* source) const {
   return type_ == BROWSER_WINDOW;
 }
 
-void MesonWebContentsBinding::HandleKeyboardEvent(content::WebContents* source, const content::NativeWebKeyboardEvent& event) {
+void WebContentsBinding::HandleKeyboardEvent(content::WebContents* source, const content::NativeWebKeyboardEvent& event) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   if (type_ == WEB_VIEW && embedder_) {
     // Send the unhandled keyboard events back to the embedder.
@@ -276,14 +306,14 @@ void MesonWebContentsBinding::HandleKeyboardEvent(content::WebContents* source, 
   }
 }
 
-void MesonWebContentsBinding::EnterFullscreenModeForTab(content::WebContents* source, const GURL& origin) {
+void WebContentsBinding::EnterFullscreenModeForTab(content::WebContents* source, const GURL& origin) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   auto permission_helper = WebContentsPermissionHelper::FromWebContents(source);
-  auto callback = base::Bind(&MesonWebContentsBinding::OnEnterFullscreenModeForTab, base::Unretained(this), source, origin);
+  auto callback = base::Bind(&WebContentsBinding::OnEnterFullscreenModeForTab, base::Unretained(this), source, origin);
   permission_helper->RequestFullscreenPermission(callback);
 }
 
-void MesonWebContentsBinding::OnEnterFullscreenModeForTab(content::WebContents* source, const GURL& origin, bool allowed) {
+void WebContentsBinding::OnEnterFullscreenModeForTab(content::WebContents* source, const GURL& origin, bool allowed) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   if (!allowed)
     return;
@@ -291,97 +321,198 @@ void MesonWebContentsBinding::OnEnterFullscreenModeForTab(content::WebContents* 
   EmitEvent("enter-html-full-screen");
 }
 
-void MesonWebContentsBinding::ExitFullscreenModeForTab(content::WebContents* source) {
+void WebContentsBinding::ExitFullscreenModeForTab(content::WebContents* source) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   CommonWebContentsDelegate::ExitFullscreenModeForTab(source);
   EmitEvent("leave-html-full-screen");
 }
 
-void MesonWebContentsBinding::RendererUnresponsive(content::WebContents* source) {
+void WebContentsBinding::RendererUnresponsive(content::WebContents* source) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   EmitEvent("unresponsive");
   if ((type_ == BROWSER_WINDOW || type_ == OFF_SCREEN) && owner_window())
     owner_window()->RendererUnresponsive(source);
 }
 
-void MesonWebContentsBinding::RendererResponsive(content::WebContents* source) {
+void WebContentsBinding::RendererResponsive(content::WebContents* source) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   EmitEvent("responsive");
   if ((type_ == BROWSER_WINDOW || type_ == OFF_SCREEN) && owner_window())
     owner_window()->RendererResponsive(source);
 }
 
-bool MesonWebContentsBinding::HandleContextMenu(const content::ContextMenuParams& params) {
+namespace {
+inline base::DictionaryValue* ToDict(const content::ContextMenuParams& params) {
+  std::unique_ptr<base::DictionaryValue> d(new base::DictionaryValue());
+  d->SetInteger("x", params.x);
+  d->SetInteger("y", params.y);
+  d->SetString("linkURL", params.link_url.spec());
+  d->SetString("linkText", params.link_text);
+  d->SetString("pageURL", params.page_url.spec());
+  d->SetString("frameURL", params.frame_url.spec());
+  d->SetString("srcURL", params.src_url.spec());
+  std::string t;
+  switch (params.media_type) {
+    case blink::WebContextMenuData::MediaType::MediaTypeImage:
+      t = "image";
+    case blink::WebContextMenuData::MediaType::MediaTypeAudio:
+      t = "audio";
+      break;
+    case blink::WebContextMenuData::MediaType::MediaTypeVideo:
+      t = "video";
+      break;
+    case blink::WebContextMenuData::MediaType::MediaTypeCanvas:
+      t = "canvas";
+      break;
+    case blink::WebContextMenuData::MediaType::MediaTypeFile:
+      t = "file";
+      break;
+    case blink::WebContextMenuData::MediaType::MediaTypePlugin:
+      t = "plugin";
+      break;
+    case blink::WebContextMenuData::MediaType::MediaTypeNone:
+      t = "none";
+      break;
+  }
+  d->SetString("mediaType", t);
+  d->SetBoolean("hasImageContents", params.has_image_contents);
+  d->SetBoolean("isEditable", params.is_editable);
+  d->SetString("selectionText", params.selection_text);
+  d->SetString("titleText", params.title_text);
+  d->SetString("missSpelledWord", params.misspelled_word);
+  d->SetString("frameCharset", params.frame_charset);
+  switch (params.input_field_type) {
+    case blink::WebContextMenuData::InputFieldType::InputFieldTypeNone:
+      t = "none";
+      break;
+    case blink::WebContextMenuData::InputFieldType::InputFieldTypePlainText:
+      t = "plainText";
+      break;
+    case blink::WebContextMenuData::InputFieldType::InputFieldTypePassword:
+      t = "password";
+      break;
+    case blink::WebContextMenuData::InputFieldType::InputFieldTypeOther:
+      t = "other";
+      break;
+  }
+  d->SetString("inputFieldType", t);
+
+  switch (params.source_type) {
+    case ui::MENU_SOURCE_NONE:
+      t = "none";
+      break;
+    case ui::MENU_SOURCE_MOUSE:
+      t = "mouse";
+      break;
+    case ui::MENU_SOURCE_KEYBOARD:
+      t = "keyboard";
+      break;
+    case ui::MENU_SOURCE_TOUCH:
+      t = "touch";
+      break;
+    case ui::MENU_SOURCE_TOUCH_EDIT_MENU:
+      t = "touchMenu";
+      break;
+    case ui::MENU_SOURCE_LONG_PRESS:
+      t = "longPress";
+      break;
+    case ui::MENU_SOURCE_LONG_TAP:
+      t = "longTap";
+      break;
+  }
+  d->SetString("menuSourceType", t);
+
+  std::unique_ptr<base::DictionaryValue> dd(new base::DictionaryValue());
+  dd->SetBoolean("inError", params.media_flags & blink::WebContextMenuData::MediaFlags::MediaInError);
+  dd->SetBoolean("inPaused", params.media_flags & blink::WebContextMenuData::MediaFlags::MediaPaused);
+  dd->SetBoolean("inMuted", params.media_flags & blink::WebContextMenuData::MediaFlags::MediaMuted);
+  dd->SetBoolean("hasAudio", params.media_flags & blink::WebContextMenuData::MediaFlags::MediaHasAudio);
+  dd->SetBoolean("isLooping", params.media_flags & blink::WebContextMenuData::MediaFlags::MediaLoop);
+  dd->SetBoolean("isControlsVisible", params.media_flags & blink::WebContextMenuData::MediaFlags::MediaControls);
+  dd->SetBoolean("canToggleControls", params.media_flags & blink::WebContextMenuData::MediaFlags::MediaCanToggleControls);
+  dd->SetBoolean("canRemote", params.media_flags & blink::WebContextMenuData::MediaFlags::MediaCanRotate);
+  d->Set("mediaFlags", std::move(dd));
+
+  dd.reset(new base::DictionaryValue());
+  dd->SetBoolean("canUndo", params.edit_flags & blink::WebContextMenuData::EditFlags::CanUndo);
+  dd->SetBoolean("canRedo", params.edit_flags & blink::WebContextMenuData::EditFlags::CanRedo);
+  dd->SetBoolean("canCut", params.edit_flags & blink::WebContextMenuData::EditFlags::CanCut);
+  dd->SetBoolean("canCopy", params.edit_flags & blink::WebContextMenuData::EditFlags::CanCopy);
+  dd->SetBoolean("canPaste", params.edit_flags & blink::WebContextMenuData::EditFlags::CanPaste);
+  dd->SetBoolean("canDelete", params.edit_flags & blink::WebContextMenuData::EditFlags::CanDelete);
+  dd->SetBoolean("canSelectAll", params.edit_flags & blink::WebContextMenuData::EditFlags::CanSelectAll);
+  d->Set("editFlags", std::move(d));
+
+  return d.release();
+}
+}
+
+bool WebContentsBinding::HandleContextMenu(const content::ContextMenuParams& params) {
   LOG(INFO) << __PRETTY_FUNCTION__;
+  std::unique_ptr<base::DictionaryValue> p(ToDict(params));
+
   if (params.custom_context.is_pepper_menu) {
-    //TODO:
-    //EmitEvent("pepper-context-menu", std::make_pair(params, web_contents()));
-    EmitEvent("pepper-context-menu");
+    //TODO: pass web_contents?
+
+    EmitEvent("pepper-context-menu", "params", p.get());
     web_contents()->NotifyContextMenuClosed(params.custom_context);
   } else {
-    //TODO:
-    //EmitEvent("context-menu", std::make_pair(params, web_contents()));
-    EmitEvent("context-menu");
+    //TODO: pass web_contents?
+    EmitEvent("context-menu", "params", p.get());
   }
 
   return true;
 }
 
-bool MesonWebContentsBinding::OnGoToEntryOffset(int offset) {
+bool WebContentsBinding::OnGoToEntryOffset(int offset) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   GoToOffset(offset);
   return false;
 }
 
-void MesonWebContentsBinding::FindReply(content::WebContents* web_contents,
-                                        int request_id,
-                                        int number_of_matches,
-                                        const gfx::Rect& selection_rect,
-                                        int active_match_ordinal,
-                                        bool final_update) {
+void WebContentsBinding::FindReply(content::WebContents* web_contents,
+                                   int request_id,
+                                   int number_of_matches,
+                                   const gfx::Rect& selection_rect,
+                                   int active_match_ordinal,
+                                   bool final_update) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   if (!final_update)
     return;
 
-#if 0
-  v8::Locker locker(isolate());
-  v8::HandleScope handle_scope(isolate());
-  mate::Dictionary result = mate::Dictionary::CreateEmpty(isolate());
-#else
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
-#endif
   result->SetInteger("requestId", request_id);
   result->SetInteger("matches", number_of_matches);
-  std::unique_ptr<base::DictionaryValue> rect(new base::DictionaryValue());
-  rect->SetInteger("x", selection_rect.x());
-  rect->SetInteger("y", selection_rect.y());
-  rect->SetInteger("width", selection_rect.width());
-  rect->SetInteger("height", selection_rect.height());
-  result->Set("selectionArea", std::move(rect));
+  std::unique_ptr<base::DictionaryValue> d(new base::DictionaryValue());
+  d->SetInteger("x", selection_rect.x());
+  d->SetInteger("y", selection_rect.y());
+  d->SetInteger("width", selection_rect.width());
+  d->SetInteger("height", selection_rect.height());
+  result->Set("selectionArea", std::move(d));
   result->SetInteger("activeMatchOrdinal", active_match_ordinal);
   result->SetBoolean("finalUpdate", final_update);  // Deprecate after 2.0
-  EmitEvent("found-in-page", result.get());
+  EmitEvent("found-in-page", "result", result.get());
 }
 
-bool MesonWebContentsBinding::CheckMediaAccessPermission(content::WebContents* web_contents, const GURL& security_origin, content::MediaStreamType type) {
+bool WebContentsBinding::CheckMediaAccessPermission(content::WebContents* web_contents, const GURL& security_origin, content::MediaStreamType type) {
   return true;
 }
 
-void MesonWebContentsBinding::RequestMediaAccessPermission(content::WebContents* web_contents,
-                                                           const content::MediaStreamRequest& request,
-                                                           const content::MediaResponseCallback& callback) {
+void WebContentsBinding::RequestMediaAccessPermission(content::WebContents* web_contents,
+                                                      const content::MediaStreamRequest& request,
+                                                      const content::MediaResponseCallback& callback) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   auto permission_helper = WebContentsPermissionHelper::FromWebContents(web_contents);
   permission_helper->RequestMediaAccessPermission(request, callback);
 }
 
-void MesonWebContentsBinding::RequestToLockMouse(content::WebContents* web_contents, bool user_gesture, bool last_unlocked_by_target) {
+void WebContentsBinding::RequestToLockMouse(content::WebContents* web_contents, bool user_gesture, bool last_unlocked_by_target) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   auto permission_helper = WebContentsPermissionHelper::FromWebContents(web_contents);
   permission_helper->RequestPointerLockPermission(user_gesture);
 }
 
-std::unique_ptr<content::BluetoothChooser> MesonWebContentsBinding::RunBluetoothChooser(content::RenderFrameHost* frame, const content::BluetoothChooser::EventHandler& event_handler) {
+std::unique_ptr<content::BluetoothChooser> WebContentsBinding::RunBluetoothChooser(content::RenderFrameHost* frame, const content::BluetoothChooser::EventHandler& event_handler) {
   LOG(INFO) << __PRETTY_FUNCTION__;
 #if 0
   //TODO:
@@ -392,132 +523,163 @@ std::unique_ptr<content::BluetoothChooser> MesonWebContentsBinding::RunBluetooth
 #endif
 }
 
-void MesonWebContentsBinding::BeforeUnloadFired(const base::TimeTicks& proceed_time) {
+void WebContentsBinding::BeforeUnloadFired(const base::TimeTicks& proceed_time) {
   // Do nothing, we override this method just to avoid compilation error since
   // there are two virtual functions named BeforeUnloadFired.
 }
 
-void MesonWebContentsBinding::RenderViewDeleted(content::RenderViewHost* render_view_host) {
+void WebContentsBinding::RenderViewDeleted(content::RenderViewHost* render_view_host) {
   LOG(INFO) << __PRETTY_FUNCTION__;
-  EmitEvent("render-view-deleted", render_view_host->GetProcess()->GetID());
+  EmitEvent("render-view-deleted", "id", render_view_host->GetProcess()->GetID());
 }
 
-void MesonWebContentsBinding::RenderProcessGone(base::TerminationStatus status) {
+void WebContentsBinding::RenderProcessGone(base::TerminationStatus status) {
   LOG(INFO) << __PRETTY_FUNCTION__;
-  EmitEvent("crashed", status == base::TERMINATION_STATUS_PROCESS_WAS_KILLED);
+  EmitEvent("crashed", "killed", status == base::TERMINATION_STATUS_PROCESS_WAS_KILLED);
 }
 
-void MesonWebContentsBinding::PluginCrashed(const base::FilePath& plugin_path, base::ProcessId plugin_pid) {
+void WebContentsBinding::PluginCrashed(const base::FilePath& plugin_path, base::ProcessId plugin_pid) {
   //TODO:
   LOG(INFO) << __PRETTY_FUNCTION__;
-#if 0
   content::WebPluginInfo info;
   auto plugin_service = content::PluginService::GetInstance();
   plugin_service->GetPluginInfoByPath(plugin_path, &info);
-  EmitEvent("plugin-crashed", info.name, info.version);
-#else
-  EmitEvent("plugin-crashed");
-#endif
+  EmitEvent("plugin-crashed", "name", info.name, "version", info.version);
 }
 
-void MesonWebContentsBinding::MediaStartedPlaying(const MediaPlayerId& id) {
+void WebContentsBinding::MediaStartedPlaying(const MediaPlayerId& id) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   EmitEvent("media-started-playing");
 }
 
-void MesonWebContentsBinding::MediaStoppedPlaying(const MediaPlayerId& id) {
+void WebContentsBinding::MediaStoppedPlaying(const MediaPlayerId& id) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   EmitEvent("media-paused");
 }
 
-void MesonWebContentsBinding::DidChangeThemeColor(SkColor theme_color) {
+void WebContentsBinding::DidChangeThemeColor(SkColor theme_color) {
   LOG(INFO) << __PRETTY_FUNCTION__;
-  EmitEvent("did-change-theme-color", meson::ToRGBHex(theme_color));
+  EmitEvent("did-change-theme-color", "color", meson::ToRGBHex(theme_color));
 }
 
-void MesonWebContentsBinding::DocumentLoadedInFrame(content::RenderFrameHost* render_frame_host) {
+void WebContentsBinding::DocumentLoadedInFrame(content::RenderFrameHost* render_frame_host) {
   LOG(INFO) << __PRETTY_FUNCTION__ << "[" << guest_instance_id_ << "]";
   if (!render_frame_host->GetParent())
     EmitEvent("dom-ready");
 }
 
-void MesonWebContentsBinding::DidFinishLoad(content::RenderFrameHost* render_frame_host, const GURL& validated_url) {
+void WebContentsBinding::DidFinishLoad(content::RenderFrameHost* render_frame_host, const GURL& validated_url) {
   LOG(INFO) << __PRETTY_FUNCTION__ << " : " << guest_instance_id_;
   bool is_main_frame = !render_frame_host->GetParent();
-  EmitEvent("did-frame-finish-load", is_main_frame);
+  EmitEvent("did-frame-finish-load", "isMainFrame", is_main_frame);
 
   if (is_main_frame)
     EmitEvent("did-finish-load");
 }
 
-void MesonWebContentsBinding::DidFailLoad(content::RenderFrameHost* render_frame_host,
-                                          const GURL& url,
-                                          int error_code,
-                                          const base::string16& error_description,
-                                          bool was_ignored_by_handler) {
+void WebContentsBinding::DidFailLoad(content::RenderFrameHost* render_frame_host,
+                                     const GURL& url,
+                                     int error_code,
+                                     const base::string16& error_description,
+                                     bool was_ignored_by_handler) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   bool is_main_frame = !render_frame_host->GetParent();
-  EmitEvent("did-fail-load", error_code, error_description, url, is_main_frame);
+  EmitEvent("did-fail-load",
+            "errorCode", error_code,
+            "errorDescription", error_description,
+            "validateURL", url,
+            "isMainFrame", is_main_frame);
 }
 
-void MesonWebContentsBinding::DidStartLoading() {
+void WebContentsBinding::DidStartLoading() {
   LOG(INFO) << __PRETTY_FUNCTION__;
   EmitEvent("did-start-loading");
 }
 
-void MesonWebContentsBinding::DidStopLoading() {
+void WebContentsBinding::DidStopLoading() {
   LOG(INFO) << __PRETTY_FUNCTION__;
   EmitEvent("did-stop-loading");
 }
 
-void MesonWebContentsBinding::DidGetResourceResponseStart(const content::ResourceRequestDetails& details) {
-#if 0
-  //TODO:これ、ログの表示がウザいな……
-  //常にイベントを戻すと面倒か?
-  Emit("did-get-response-details", details.socket_address.IsEmpty(), details.url, details.original_url, details.http_response_code,
-       details.method, details.referrer, details.headers.get() /*,  TODO: ResourceTypeToString(details.resource_type)*/);
-#endif
+namespace {
+inline base::DictionaryValue* ToDict(scoped_refptr<net::HttpResponseHeaders> headers) {
+  std::unique_ptr<base::DictionaryValue> d(new base::DictionaryValue());
+  if (headers) {
+    size_t iter = 0;
+    std::string n, v;
+    while (headers->EnumerateHeaderLines(&iter, &n, &v)) {
+      d->SetString(n, v);
+    }
+  }
+  return d.release();
+}
 }
 
-void MesonWebContentsBinding::DidGetRedirectForResourceRequest(content::RenderFrameHost* render_frame_host, const content::ResourceRedirectDetails& details) {
-  EmitEvent("did-get-redirect-request", details.url, details.new_url, (details.resource_type == content::RESOURCE_TYPE_MAIN_FRAME),
-            details.http_response_code, details.method, details.referrer, details.headers.get());
+void WebContentsBinding::DidGetResourceResponseStart(const content::ResourceRequestDetails& details) {
+  std::unique_ptr<base::DictionaryValue> h(ToDict(details.headers));
+  EmitEvent("did-get-response-details",
+            "status", details.socket_address.IsEmpty(),
+            "newURL", details.url,
+            "originalURL", details.original_url,
+            "httpResponseCode", details.http_response_code,
+            "requestMethod", details.method,
+            "referer", details.referrer,
+            "headers", h.get(),
+            "resourceType", details.resource_type);
 }
 
-void MesonWebContentsBinding::DidFinishNavigation(content::NavigationHandle* navigation_handle) {
+void WebContentsBinding::DidGetRedirectForResourceRequest(content::RenderFrameHost* render_frame_host, const content::ResourceRedirectDetails& details) {
+  std::unique_ptr<base::DictionaryValue> h(ToDict(details.headers));
+  EmitEvent("did-get-redirect-request",
+            "oldURL", details.url,
+            "newURL", details.new_url,
+            "isMainFrame", (details.resource_type == content::RESOURCE_TYPE_MAIN_FRAME),
+            "httpResponseCode", details.http_response_code,
+            "requestMethod", details.method,
+            "referer", details.referrer,
+            "headers", h.get());
+}
+
+void WebContentsBinding::DidFinishNavigation(content::NavigationHandle* navigation_handle) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   bool is_main_frame = navigation_handle->IsInMainFrame();
   if (navigation_handle->HasCommitted() && !navigation_handle->IsErrorPage()) {
     auto url = navigation_handle->GetURL();
     bool is_in_page = navigation_handle->IsSamePage();
     if (is_main_frame && !is_in_page) {
-      EmitEvent("did-navigate", url);
+      EmitEvent("did-navigate", "url", url);
     } else if (is_in_page) {
-      EmitEvent("did-navigate-in-page", url, is_main_frame);
+      EmitEvent("did-navigate-in-page", "url", url, "isMainFrame", is_main_frame);
     }
   } else {
     auto url = navigation_handle->GetURL();
     int code = navigation_handle->GetNetErrorCode();
     auto description = net::ErrorToShortString(code);
-    EmitEvent("did-fail-provisional-load", code, description, url, is_main_frame);
+    EmitEvent("did-fail-provisional-load",
+              "errorCode", code,
+              "errorDescription", description,
+              "validatedURL", url,
+              "isMainFrame", is_main_frame);
 
     // Do not emit "did-fail-load" for canceled requests.
     if (code != net::ERR_ABORTED)
-      EmitEvent("did-fail-load", code, description, url, is_main_frame);
+      EmitEvent("did-fail-load",
+                "errorCode", code,
+                "errorDescription", description,
+                "validatedURL", url,
+                "isMainFrame", is_main_frame);
   }
 }
 
-void MesonWebContentsBinding::TitleWasSet(content::NavigationEntry* entry, bool explicit_set) {
+void WebContentsBinding::TitleWasSet(content::NavigationEntry* entry, bool explicit_set) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   if (entry)
-    EmitEvent("-page-title-updated", entry->GetTitle(), explicit_set);
+    EmitEvent("-page-title-updated", "title", entry->GetTitle(), "explicitSet", explicit_set);
   else
-    EmitEvent("-page-title-updated", "", explicit_set);
+    EmitEvent("-page-title-updated", "title", "", "explicitSet", explicit_set);
 }
 
-void MesonWebContentsBinding::DidUpdateFaviconURL(const std::vector<content::FaviconURL>& urls) {
-#if 0
-  //TODO:
+void WebContentsBinding::DidUpdateFaviconURL(const std::vector<content::FaviconURL>& urls) {
   std::set<GURL> unique_urls;
   for (const auto& iter : urls) {
     if (iter.icon_type != content::FaviconURL::FAVICON)
@@ -526,28 +688,29 @@ void MesonWebContentsBinding::DidUpdateFaviconURL(const std::vector<content::Fav
     if (url.is_valid())
       unique_urls.insert(url);
   }
-  EmitEvent("page-favicon-updated", unique_urls);
-#else
-  EmitEvent("page-favicon-updated");
-#endif
+  std::vector<std::string> url_strs;
+  for (const auto& url : unique_urls) {
+    url_strs.push_back(url.spec());
+  }
+  EmitEvent("page-favicon-updated", "favicons", url_strs);
 }
 
-void MesonWebContentsBinding::DevToolsReloadPage() {
+void WebContentsBinding::DevToolsReloadPage() {
   EmitEvent("devtools-reload-page");
 }
 
-void MesonWebContentsBinding::DevToolsFocused() {
+void WebContentsBinding::DevToolsFocused() {
   EmitEvent("devtools-focused");
 }
 
-void MesonWebContentsBinding::DevToolsOpened() {
+void WebContentsBinding::DevToolsOpened() {
 //TODO:
 #if 0
   v8::Locker locker(isolate());
   v8::HandleScope handle_scope(isolate());
-  auto handle = MesonWebContentsBinding::CreateFrom(isolate(), managed_web_contents()->GetDevToolsWebContents());
+  auto handle = WebContentsBinding::CreateFrom(isolate(), managed_web_contents()->GetDevToolsWebContents());
   auto c = managed_web_contents()->GetDevToolsWebContents();
-  auto handle = API::Get()->Create(MesonWebContentsBinding::Name, c);
+  auto handle = API::Get()->Create(WebContentsBinding::Name, c);
   devtools_web_contents_.Reset(isolate(), handle.ToV8());
 
   // Set inspected tabID.
@@ -564,39 +727,30 @@ void MesonWebContentsBinding::DevToolsOpened() {
   EmitEvent("devtools-opened");
 }
 
-void MesonWebContentsBinding::DevToolsClosed() {
+void WebContentsBinding::DevToolsClosed() {
 #if 0
   v8::Locker locker(isolate());
   v8::HandleScope handle_scope(isolate());
   devtools_web_contents_.Reset();
 #endif
+  devtools_web_contents_ = nullptr;
 
   EmitEvent("devtools-closed");
 }
 
-bool MesonWebContentsBinding::OnMessageReceived(const IPC::Message& message) {
+bool WebContentsBinding::OnMessageReceived(const IPC::Message& message) {
   DLOG(INFO) << __PRETTY_FUNCTION__ << "[" << guest_instance_id_ << "] : " << message.type() << " : " << message.size();
   bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(MesonWebContentsBinding, message)
+  IPC_BEGIN_MESSAGE_MAP(WebContentsBinding, message)
     IPC_MESSAGE_HANDLER(MesonViewHostMsg_Message, OnRendererMessage)
     IPC_MESSAGE_HANDLER_DELAY_REPLY(MesonViewHostMsg_Message_Sync, OnRendererMessageSync)
 
-#if 0
     IPC_MESSAGE_HANDLER_CODE(ViewHostMsg_SetCursor, OnCursorChange, handled = false)
-#endif
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
   return handled;
 }
-
-#if 0
-namespace {
-void webContentsFinalizer(scoped_refptr<MesonWebContentsBinding> self) {
-  LOG(INFO) << __PRETTY_FUNCTION__ << " : " << self.get();
-}
-}
-#endif
 
 // There are three ways of destroying a webContents:
 // 1. call webContents.destroy();
@@ -610,12 +764,12 @@ void webContentsFinalizer(scoped_refptr<MesonWebContentsBinding> self) {
 // sure "destroyed" event is emitted. For #3, the content::WebContents will
 // be destroyed on close, and WebContentsDestroyed would be called for it, so
 // we need to make sure the api::WebContents is also deleted.
-void MesonWebContentsBinding::WebContentsDestroyed() {
+void WebContentsBinding::WebContentsDestroyed() {
   LOG(INFO) << __PRETTY_FUNCTION__;
   WebContentsDestroyedCore(false);
 }
 
-void MesonWebContentsBinding::WebContentsDestroyedCore(bool destructor) {
+void WebContentsBinding::WebContentsDestroyedCore(bool destructor) {
   LOG(INFO) << __PRETTY_FUNCTION__ << " : " << destructor;
   // This event is only for internal use, which is emitted when WebContents is
   // being destroyed.
@@ -623,58 +777,51 @@ void MesonWebContentsBinding::WebContentsDestroyedCore(bool destructor) {
 
   // Cleanup relationships with other parts.
   if (!destructor) {
-    auto self = API::Get()->GetBinding<MesonWebContentsBinding>(GetID());
+    auto self = WebContentsBinding::Class().GetBinding(GetID());
     if (self) {
       CHECK(self.get() == this);
-      API::Get()->RemoveBinding(this);
+      WebContentsBinding::Class().RemoveBinding(this);
     }
   }
-#if 0
-  //TODO:
-  RemoveFromWeakMap();
-
-  // We can not call Destroy here because we need to call Emit first, but we
-  // also do not want any method to be used, so just mark as destroyed here.
-  MarkDestroyed();
-#endif
 
   EmitEvent("destroyed");
-
-#if 0
-  if (self) {
-    base::MessageLoop::current()->PostTask(FROM_HERE, base::Bind(webContentsFinalizer, self));
-  }
-#endif
 }
 
-void MesonWebContentsBinding::NavigationEntryCommitted(const content::LoadCommittedDetails& details) {
+void WebContentsBinding::NavigationEntryCommitted(const content::LoadCommittedDetails& details) {
   LOG(INFO) << __PRETTY_FUNCTION__;
-  EmitEvent("navigation-entry-commited" /*TODO: , details.entry->GetURL(), details.is_in_page, details.did_replace_entry*/);
+  EmitEvent("navigation-entry-commited",
+            "url", details.entry->GetURL(),
+            "isInPage", details.is_in_page,
+            "didReplaceEntry", details.did_replace_entry);
 }
 
-int64_t MesonWebContentsBinding::GetWebContentsID() const {
+int64_t WebContentsBinding::GetWebContentsID() const {
   int64_t process_id = web_contents()->GetRenderProcessHost()->GetID();
   int64_t routing_id = web_contents()->GetRoutingID();
   int64_t rv = (process_id << 32) + routing_id;
   return rv;
 }
 
-int MesonWebContentsBinding::GetProcessID() const {
+int WebContentsBinding::GetProcessID() const {
   return web_contents()->GetRenderProcessHost()->GetID();
 }
 
-MesonWebContentsBinding::Type MesonWebContentsBinding::GetType() const {
+WebContentsBinding::Type WebContentsBinding::GetType() const {
   return type_;
 }
 
-bool MesonWebContentsBinding::Equal(const MesonWebContentsBinding* web_contents) const {
+bool WebContentsBinding::Equal(const WebContentsBinding* web_contents) const {
   return GetWebContentsID() == web_contents->GetWebContentsID();
 }
 
-void MesonWebContentsBinding::LoadURL(const GURL& url, const base::DictionaryValue& options) {
+void WebContentsBinding::LoadURL(const GURL& url, const base::DictionaryValue& options) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   if (!url.is_valid()) {
-    EmitEvent("did-fail-load", static_cast<int>(net::ERR_INVALID_URL), net::ErrorToShortString(net::ERR_INVALID_URL), url.possibly_invalid_spec(), true);
+    EmitEvent("did-fail-load",
+              "errorCode", static_cast<int>(net::ERR_INVALID_URL),
+              "errorDescription", net::ErrorToShortString(net::ERR_INVALID_URL),
+              "validatedURL", url.possibly_invalid_spec(),
+              "isMainFrame", true);
     return;
   }
 
@@ -716,72 +863,72 @@ void MesonWebContentsBinding::LoadURL(const GURL& url, const base::DictionaryVal
   host->disable_hidden_ = !background_throttling_;
 }
 
-void MesonWebContentsBinding::DownloadURL(const GURL& url) {
+void WebContentsBinding::DownloadURL(const GURL& url) {
   auto browser_context = web_contents()->GetBrowserContext();
   auto download_manager = content::BrowserContext::GetDownloadManager(browser_context);
 
   download_manager->DownloadUrl(content::DownloadUrlParameters::CreateForWebContentsMainFrame(web_contents(), url));
 }
 
-GURL MesonWebContentsBinding::GetURL() const {
+GURL WebContentsBinding::GetURL() const {
   return web_contents()->GetURL();
 }
 
-base::string16 MesonWebContentsBinding::GetTitle() const {
+base::string16 WebContentsBinding::GetTitle() const {
   return web_contents()->GetTitle();
 }
 
-bool MesonWebContentsBinding::IsLoading() const {
+bool WebContentsBinding::IsLoading() const {
   return web_contents()->IsLoading();
 }
 
-bool MesonWebContentsBinding::IsLoadingMainFrame() const {
+bool WebContentsBinding::IsLoadingMainFrame() const {
   // Comparing site instances works because Electron always creates a new site
   // instance when navigating, regardless of origin. See AtomBrowserClient.
   return (web_contents()->GetLastCommittedURL().is_empty() || web_contents()->GetSiteInstance() != web_contents()->GetPendingSiteInstance()) && IsLoading();
 }
 
-bool MesonWebContentsBinding::IsWaitingForResponse() const {
+bool WebContentsBinding::IsWaitingForResponse() const {
   return web_contents()->IsWaitingForResponse();
 }
 
-void MesonWebContentsBinding::Stop() {
+void WebContentsBinding::Stop() {
   web_contents()->Stop();
 }
 
-void MesonWebContentsBinding::GoBack() {
-  meson::MesonBrowserClient::SuppressRendererProcessRestartForOnce();
+void WebContentsBinding::GoBack() {
+  MesonBrowserClient::SuppressRendererProcessRestartForOnce();
   web_contents()->GetController().GoBack();
 }
 
-void MesonWebContentsBinding::GoForward() {
-  meson::MesonBrowserClient::SuppressRendererProcessRestartForOnce();
+void WebContentsBinding::GoForward() {
+  MesonBrowserClient::SuppressRendererProcessRestartForOnce();
   web_contents()->GetController().GoForward();
 }
 
-void MesonWebContentsBinding::GoToOffset(int offset) {
-  meson::MesonBrowserClient::SuppressRendererProcessRestartForOnce();
+void WebContentsBinding::GoToOffset(int offset) {
+  MesonBrowserClient::SuppressRendererProcessRestartForOnce();
   web_contents()->GetController().GoToOffset(offset);
 }
 
-bool MesonWebContentsBinding::IsCrashed() const {
+bool WebContentsBinding::IsCrashed() const {
   return web_contents()->IsCrashed();
 }
 
-void MesonWebContentsBinding::SetUserAgent(const std::string& user_agent, base::ListValue* args) {
+void WebContentsBinding::SetUserAgent(const std::string& user_agent, base::ListValue* args) {
   web_contents()->SetUserAgentOverride(user_agent);
 }
 
-std::string MesonWebContentsBinding::GetUserAgent() {
+std::string WebContentsBinding::GetUserAgent() {
   return web_contents()->GetUserAgentOverride();
 }
 
-void MesonWebContentsBinding::InsertCSS(const std::string& css) {
+void WebContentsBinding::InsertCSS(const std::string& css) {
   web_contents()->InsertCSS(css);
 }
 
 #if 0
-bool MesonWebContentsBinding::SavePage(const base::FilePath& full_file_path,
+bool WebContentsBinding::SavePage(const base::FilePath& full_file_path,
                                        const content::SavePageType& save_type,
                                        const SavePageHandler::SavePageCallback& callback) {
   auto handler = new SavePageHandler(web_contents(), callback);
@@ -789,7 +936,7 @@ bool MesonWebContentsBinding::SavePage(const base::FilePath& full_file_path,
 }
 #endif
 
-void MesonWebContentsBinding::OpenDevTools(base::ListValue* args) {
+void WebContentsBinding::OpenDevTools(base::ListValue* args) {
   if (type_ == REMOTE)
     return;
 
@@ -815,21 +962,21 @@ void MesonWebContentsBinding::OpenDevTools(base::ListValue* args) {
   managed_web_contents()->ShowDevTools();
 }
 
-void MesonWebContentsBinding::CloseDevTools() {
+void WebContentsBinding::CloseDevTools() {
   if (type_ == REMOTE)
     return;
 
   managed_web_contents()->CloseDevTools();
 }
 
-bool MesonWebContentsBinding::IsDevToolsOpened() {
+bool WebContentsBinding::IsDevToolsOpened() {
   if (type_ == REMOTE)
     return false;
 
   return managed_web_contents()->IsDevToolsViewShowing();
 }
 
-bool MesonWebContentsBinding::IsDevToolsFocused() {
+bool WebContentsBinding::IsDevToolsFocused() {
   if (type_ == REMOTE)
     return false;
 
@@ -837,14 +984,14 @@ bool MesonWebContentsBinding::IsDevToolsFocused() {
 }
 
 #if 0
-void MesonWebContentsBinding::EnableDeviceEmulation(const blink::WebDeviceEmulationParams& params) {
+void WebContentsBinding::EnableDeviceEmulation(const blink::WebDeviceEmulationParams& params) {
   if (type_ == REMOTE)
     return;
 
   Send(new ViewMsg_EnableDeviceEmulation(routing_id(), params));
 }
 
-void MesonWebContentsBinding::DisableDeviceEmulation() {
+void WebContentsBinding::DisableDeviceEmulation() {
   if (type_ == REMOTE)
     return;
 
@@ -852,14 +999,14 @@ void MesonWebContentsBinding::DisableDeviceEmulation() {
 }
 #endif
 
-void MesonWebContentsBinding::ToggleDevTools() {
+void WebContentsBinding::ToggleDevTools() {
   if (IsDevToolsOpened())
     CloseDevTools();
   else
     OpenDevTools(nullptr);
 }
 
-void MesonWebContentsBinding::InspectElement(int x, int y) {
+void WebContentsBinding::InspectElement(int x, int y) {
   if (type_ == REMOTE)
     return;
 
@@ -872,7 +1019,7 @@ void MesonWebContentsBinding::InspectElement(int x, int y) {
   agent->InspectElement(x, y);
 }
 
-void MesonWebContentsBinding::InspectServiceWorker() {
+void WebContentsBinding::InspectServiceWorker() {
   if (type_ == REMOTE)
     return;
 
@@ -888,7 +1035,7 @@ void MesonWebContentsBinding::InspectServiceWorker() {
   }
 }
 
-void MesonWebContentsBinding::HasServiceWorker(const base::Callback<void(bool)>& callback) {
+void WebContentsBinding::HasServiceWorker(const base::Callback<void(bool)>& callback) {
   LOG(ERROR) << __PRETTY_FUNCTION__ << " not implemented.";
 #if 0
   //TODO:
@@ -900,7 +1047,7 @@ void MesonWebContentsBinding::HasServiceWorker(const base::Callback<void(bool)>&
 #endif
 }
 
-void MesonWebContentsBinding::UnregisterServiceWorker(const base::Callback<void(bool)>& callback) {
+void WebContentsBinding::UnregisterServiceWorker(const base::Callback<void(bool)>& callback) {
   LOG(ERROR) << __PRETTY_FUNCTION__ << " not implemented.";
 #if 0
   //TODO:
@@ -912,17 +1059,17 @@ void MesonWebContentsBinding::UnregisterServiceWorker(const base::Callback<void(
 #endif
 }
 
-void MesonWebContentsBinding::SetAudioMuted(bool muted) {
+void WebContentsBinding::SetAudioMuted(bool muted) {
   web_contents()->SetAudioMuted(muted);
 }
 
-bool MesonWebContentsBinding::IsAudioMuted() {
+bool WebContentsBinding::IsAudioMuted() {
   return web_contents()->IsAudioMuted();
 }
 
 #if 0
   //TODO:
-void MesonWebContentsBinding::Print(mate::Arguments* args) {
+void WebContentsBinding::Print(mate::Arguments* args) {
   PrintSettings settings = {false, false};
   if (args->Length() == 1 && !args->GetNext(&settings)) {
     args->ThrowError();
@@ -933,13 +1080,13 @@ void MesonWebContentsBinding::Print(mate::Arguments* args) {
       ->PrintNow(settings.silent, settings.print_background);
 }
 
-void MesonWebContentsBinding::PrintToPDF(const base::DictionaryValue& setting,
+void WebContentsBinding::PrintToPDF(const base::DictionaryValue& setting,
                                          const PrintToPDFCallback& callback) {
   printing::PrintPreviewMessageHandler::FromWebContents(web_contents())->PrintToPDF(setting, callback);
 }
 #endif
 
-void MesonWebContentsBinding::AddWorkSpace(base::ListValue* args, const base::FilePath& path) {
+void WebContentsBinding::AddWorkSpace(base::ListValue* args, const base::FilePath& path) {
   LOG(INFO) << __PRETTY_FUNCTION__;
 //TODO: エラーを返す方法を検討する
 #if 0
@@ -951,7 +1098,7 @@ void MesonWebContentsBinding::AddWorkSpace(base::ListValue* args, const base::Fi
   DevToolsAddFileSystem(path);
 }
 
-void MesonWebContentsBinding::RemoveWorkSpace(base::ListValue* args, const base::FilePath& path) {
+void WebContentsBinding::RemoveWorkSpace(base::ListValue* args, const base::FilePath& path) {
   LOG(INFO) << __PRETTY_FUNCTION__;
 //TODO: エラーを返す方法を検討する
 #if 0
@@ -963,51 +1110,51 @@ void MesonWebContentsBinding::RemoveWorkSpace(base::ListValue* args, const base:
   DevToolsRemoveFileSystem(path);
 }
 
-void MesonWebContentsBinding::Undo() {
+void WebContentsBinding::Undo() {
   web_contents()->Undo();
 }
 
-void MesonWebContentsBinding::Redo() {
+void WebContentsBinding::Redo() {
   web_contents()->Redo();
 }
 
-void MesonWebContentsBinding::Cut() {
+void WebContentsBinding::Cut() {
   web_contents()->Cut();
 }
 
-void MesonWebContentsBinding::Copy() {
+void WebContentsBinding::Copy() {
   web_contents()->Copy();
 }
 
-void MesonWebContentsBinding::Paste() {
+void WebContentsBinding::Paste() {
   web_contents()->Paste();
 }
 
-void MesonWebContentsBinding::PasteAndMatchStyle() {
+void WebContentsBinding::PasteAndMatchStyle() {
   web_contents()->PasteAndMatchStyle();
 }
 
-void MesonWebContentsBinding::Delete() {
+void WebContentsBinding::Delete() {
   web_contents()->Delete();
 }
 
-void MesonWebContentsBinding::SelectAll() {
+void WebContentsBinding::SelectAll() {
   web_contents()->SelectAll();
 }
 
-void MesonWebContentsBinding::Unselect() {
+void WebContentsBinding::Unselect() {
   web_contents()->Unselect();
 }
 
-void MesonWebContentsBinding::Replace(const base::string16& word) {
+void WebContentsBinding::Replace(const base::string16& word) {
   web_contents()->Replace(word);
 }
 
-void MesonWebContentsBinding::ReplaceMisspelling(const base::string16& word) {
+void WebContentsBinding::ReplaceMisspelling(const base::string16& word) {
   web_contents()->ReplaceMisspelling(word);
 }
 
-uint32_t MesonWebContentsBinding::FindInPage(base::ListValue* args) {
+size_t WebContentsBinding::FindInPage(base::ListValue* args) {
 #if 0
   //TODO:
   uint32_t request_id = GetNextRequestId();
@@ -1027,11 +1174,11 @@ uint32_t MesonWebContentsBinding::FindInPage(base::ListValue* args) {
 #endif
 }
 
-void MesonWebContentsBinding::StopFindInPage(content::StopFindAction action) {
+void WebContentsBinding::StopFindInPage(content::StopFindAction action) {
   web_contents()->StopFinding(action);
 }
 
-void MesonWebContentsBinding::ShowDefinitionForSelection() {
+void WebContentsBinding::ShowDefinitionForSelection() {
 #if defined(OS_MACOSX)
   const auto view = web_contents()->GetRenderWidgetHostView();
   if (view)
@@ -1039,18 +1186,18 @@ void MesonWebContentsBinding::ShowDefinitionForSelection() {
 #endif
 }
 
-void MesonWebContentsBinding::CopyImageAt(int x, int y) {
+void WebContentsBinding::CopyImageAt(int x, int y) {
   const auto host = web_contents()->GetMainFrame();
   if (host)
     host->CopyImageAt(x, y);
 }
 
-void MesonWebContentsBinding::Focus() {
+void WebContentsBinding::Focus() {
   web_contents()->Focus();
 }
 
 #if !defined(OS_MACOSX)
-bool MesonWebContentsBinding::IsFocused() const {
+bool WebContentsBinding::IsFocused() const {
   auto view = web_contents()->GetRenderWidgetHostView();
   if (!view)
     return false;
@@ -1065,16 +1212,16 @@ bool MesonWebContentsBinding::IsFocused() const {
 }
 #endif
 
-void MesonWebContentsBinding::TabTraverse(bool reverse) {
+void WebContentsBinding::TabTraverse(bool reverse) {
   web_contents()->FocusThroughTabTraversal(reverse);
 }
 
-bool MesonWebContentsBinding::SendIPCMessage(bool all_frames, const base::string16& channel, const base::ListValue& args) {
+bool WebContentsBinding::SendIPCMessage(bool all_frames, const base::string16& channel, const base::ListValue& args) {
   return Send(new MesonViewMsg_Message(routing_id(), all_frames, channel, args));
 }
 
 #if 0
-void MesonWebContentsBinding::SendInputEvent(v8::Isolate* isolate, v8::Local<v8::Value> input_event) {
+void WebContentsBinding::SendInputEvent(v8::Isolate* isolate, v8::Local<v8::Value> input_event) {
   const auto view = web_contents()->GetRenderWidgetHostView();
   if (!view)
     return;
@@ -1108,7 +1255,7 @@ void MesonWebContentsBinding::SendInputEvent(v8::Isolate* isolate, v8::Local<v8:
 }
 #endif
 
-void MesonWebContentsBinding::BeginFrameSubscription(base::ListValue* args) {
+void WebContentsBinding::BeginFrameSubscription(base::ListValue* args) {
 #if 0
   //TODO:
   bool only_dirty = false;
@@ -1130,7 +1277,7 @@ void MesonWebContentsBinding::BeginFrameSubscription(base::ListValue* args) {
 #endif
 }
 
-void MesonWebContentsBinding::EndFrameSubscription() {
+void WebContentsBinding::EndFrameSubscription() {
 #if 0
   //TODO:
   const auto view = web_contents()->GetRenderWidgetHostView();
@@ -1139,7 +1286,7 @@ void MesonWebContentsBinding::EndFrameSubscription() {
 #endif
 }
 
-void MesonWebContentsBinding::StartDrag(const base::DictionaryValue& item, base::ListValue* args) {
+void WebContentsBinding::StartDrag(const base::DictionaryValue& item, base::ListValue* args) {
 #if 0
   //TODO:
   base::FilePath file;
@@ -1170,7 +1317,7 @@ void MesonWebContentsBinding::StartDrag(const base::DictionaryValue& item, base:
 #endif
 }
 
-void MesonWebContentsBinding::CapturePage(base::ListValue* args) {
+void WebContentsBinding::CapturePage(base::ListValue* args) {
 #if 0
   //TODO:
   gfx::Rect rect;
@@ -1209,39 +1356,39 @@ void MesonWebContentsBinding::CapturePage(base::ListValue* args) {
 #endif
 }
 
-void MesonWebContentsBinding::OnCursorChange(const content::WebCursor& cursor) {
+void WebContentsBinding::OnCursorChange(const content::WebCursor& cursor) {
   content::WebCursor::CursorInfo info;
   cursor.GetCursorInfo(&info);
 
   if (cursor.IsCustom()) {
-    EmitEvent("cursor-changed" /*, TODO:CursorTypeToString(info),
-         gfx::Image::CreateFrom1xBitmap(info.custom_image),
+    EmitEvent("cursor-changed", "type", CursorTypeToString(info)
+              /*,TODO: nativeImage      gfx::Image::CreateFrom1xBitmap(info.custom_image),
          info.image_scale_factor,
          gfx::Size(info.custom_image.width(), info.custom_image.height()),
          info.hotspot */);
   } else {
-    EmitEvent("cursor-changed" /*, TODO:CursorTypeToString(info)*/);
+    EmitEvent("cursor-changed", "type", CursorTypeToString(info));
   }
 }
 
-void MesonWebContentsBinding::SetSize(const SetSizeParams& params) {
+void WebContentsBinding::SetSize(const SetSizeParams& params) {
   if (guest_delegate_)
     guest_delegate_->SetSize(params);
 }
 
-void MesonWebContentsBinding::OnPaint(const gfx::Rect& dirty_rect, const SkBitmap& bitmap) {
+void WebContentsBinding::OnPaint(const gfx::Rect& dirty_rect, const SkBitmap& bitmap) {
 #if 0
-  //TODO:
+  //TODO: nativeImage
   mate::Handle<NativeImage> image =      NativeImage::Create(isolate(), gfx::Image::CreateFrom1xBitmap(bitmap));
   Emit("paint", dirty_rect, image);
 #endif
 }
 
-void MesonWebContentsBinding::StartPainting() {
+void WebContentsBinding::StartPainting() {
   if (!IsOffscreen())
     return;
 #if 0
-  //TODO:
+  //TODO: offscreen support
 
   auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
@@ -1250,11 +1397,11 @@ void MesonWebContentsBinding::StartPainting() {
 #endif
 }
 
-void MesonWebContentsBinding::StopPainting() {
+void WebContentsBinding::StopPainting() {
   if (!IsOffscreen())
     return;
 #if 0
-  //TODO:
+  //TODO: offscreen support
   auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
   if (osr_rwhv)
@@ -1262,11 +1409,11 @@ void MesonWebContentsBinding::StopPainting() {
 #endif
 }
 
-bool MesonWebContentsBinding::IsPainting() const {
+bool WebContentsBinding::IsPainting() const {
   if (!IsOffscreen())
     return false;
 #if 0
-  //TODO:
+  //TODO: offscreen support
   const auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
   return osr_rwhv && osr_rwhv->IsPainting();
@@ -1274,11 +1421,11 @@ bool MesonWebContentsBinding::IsPainting() const {
   return false;
 }
 
-void MesonWebContentsBinding::SetFrameRate(int frame_rate) {
+void WebContentsBinding::SetFrameRate(int frame_rate) {
   if (!IsOffscreen())
     return;
 #if 0
-  //TODO:
+  //TODO: offscreen support
   auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
   if (osr_rwhv)
@@ -1286,11 +1433,11 @@ void MesonWebContentsBinding::SetFrameRate(int frame_rate) {
 #endif
 }
 
-int MesonWebContentsBinding::GetFrameRate() const {
+int WebContentsBinding::GetFrameRate() const {
   if (!IsOffscreen())
     return 0;
 #if 0
-  //TODO:
+  //TODO: offscreen support
   const auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
   return osr_rwhv ? osr_rwhv->GetFrameRate() : 0;
@@ -1298,11 +1445,11 @@ int MesonWebContentsBinding::GetFrameRate() const {
   return 0;
 }
 
-void MesonWebContentsBinding::Invalidate() {
+void WebContentsBinding::Invalidate() {
   if (!IsOffscreen())
     return;
 #if 0
-  //TODO:
+  //TODO: offscreen support
   auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
   if (osr_rwhv)
@@ -1310,36 +1457,13 @@ void MesonWebContentsBinding::Invalidate() {
 #endif
 }
 
-#if 0
-v8::Local<v8::Value> MesonWebContentsBinding::GetWebPreferences(v8::Isolate* isolate) {
-  WebContentsPreferences* web_preferences =
-      WebContentsPreferences::FromWebContents(web_contents());
-  return mate::ConvertToV8(isolate, *web_preferences->web_preferences());
-}
-
-v8::Local<v8::Value> MesonWebContentsBinding::GetOwnerBrowserWindow() {
-  if (owner_window())
-    return Window::From(isolate(), owner_window());
-  else
-    return v8::Null(isolate());
-}
-
-int32_t MesonWebContentsBinding::ID() const {
-  return weak_map_id();
-}
-
-v8::Local<v8::Value> MesonWebContentsBinding::Session(v8::Isolate* isolate) {
-  return v8::Local<v8::Value>::New(isolate, session_);
-}
-#endif
-
-content::WebContents* MesonWebContentsBinding::HostWebContents() {
+content::WebContents* WebContentsBinding::HostWebContents() {
   if (!embedder_)
     return nullptr;
   return embedder_->web_contents();
 }
 
-void MesonWebContentsBinding::WebViewEmit(const std::string& type, const base::DictionaryValue& params) {
+void WebContentsBinding::WebViewEmit(const std::string& type, const base::DictionaryValue& params) {
   if (embedder_) {
     auto frame = embedder_->web_contents()->GetMainFrame();
     //auto frame = web_contents()->GetMainFrame();
@@ -1348,7 +1472,7 @@ void MesonWebContentsBinding::WebViewEmit(const std::string& type, const base::D
   }
 }
 
-void MesonWebContentsBinding::SetEmbedder(void) {
+void WebContentsBinding::SetEmbedder(void) {
   if (embedder_) {
     NativeWindow* owner_window = nullptr;
     auto relay = NativeWindowRelay::FromWebContents(embedder_->web_contents());
@@ -1367,14 +1491,14 @@ void MesonWebContentsBinding::SetEmbedder(void) {
 }
 #if 0
   //TODO:
-v8::Local<v8::Value> MesonWebContentsBinding::DevToolsWebContents(v8::Isolate* isolate) {
+v8::Local<v8::Value> WebContentsBinding::DevToolsWebContents(v8::Isolate* isolate) {
   if (devtools_web_contents_.IsEmpty())
     return v8::Null(isolate);
   else
     return v8::Local<v8::Value>::New(isolate, devtools_web_contents_);
 }
 
-v8::Local<v8::Value> MesonWebContentsBinding::Debugger(v8::Isolate* isolate) {
+v8::Local<v8::Value> WebContentsBinding::Debugger(v8::Isolate* isolate) {
   if (debugger_.IsEmpty()) {
     auto handle = atom::api::Debugger::Create(isolate, web_contents());
     debugger_.Reset(isolate, handle.ToV8());
@@ -1383,95 +1507,95 @@ v8::Local<v8::Value> MesonWebContentsBinding::Debugger(v8::Isolate* isolate) {
 }
 
 // static
-void MesonWebContentsBinding::BuildPrototype(v8::Isolate* isolate,
+void WebContentsBinding::BuildPrototype(v8::Isolate* isolate,
                                              v8::Local<v8::FunctionTemplate> prototype) {
   prototype->SetClassName(mate::StringToV8(isolate, "WebContents"));
   mate::ObjectTemplateBuilder(isolate, prototype->PrototypeTemplate())
       .MakeDestroyable()
-    .SetMethod("getId", &MesonWebContentsBinding::GetWebContentsID)
-      .SetMethod("getProcessId", &MesonWebContentsBinding::GetProcessID)
-      .SetMethod("equal", &MesonWebContentsBinding::Equal)
-      .SetMethod("_loadURL", &MesonWebContentsBinding::LoadURL)
-      .SetMethod("downloadURL", &MesonWebContentsBinding::DownloadURL)
-      .SetMethod("_getURL", &MesonWebContentsBinding::GetURL)
-      .SetMethod("getTitle", &MesonWebContentsBinding::GetTitle)
-      .SetMethod("isLoading", &MesonWebContentsBinding::IsLoading)
-      .SetMethod("isLoadingMainFrame", &MesonWebContentsBinding::IsLoadingMainFrame)
-      .SetMethod("isWaitingForResponse", &MesonWebContentsBinding::IsWaitingForResponse)
-      .SetMethod("_stop", &MesonWebContentsBinding::Stop)
-      .SetMethod("_goBack", &MesonWebContentsBinding::GoBack)
-      .SetMethod("_goForward", &MesonWebContentsBinding::GoForward)
-      .SetMethod("_goToOffset", &MesonWebContentsBinding::GoToOffset)
-      .SetMethod("isCrashed", &MesonWebContentsBinding::IsCrashed)
-      .SetMethod("setUserAgent", &MesonWebContentsBinding::SetUserAgent)
-      .SetMethod("getUserAgent", &MesonWebContentsBinding::GetUserAgent)
-      .SetMethod("insertCSS", &MesonWebContentsBinding::InsertCSS)
-      .SetMethod("savePage", &MesonWebContentsBinding::SavePage)
-      .SetMethod("openDevTools", &MesonWebContentsBinding::OpenDevTools)
-      .SetMethod("closeDevTools", &MesonWebContentsBinding::CloseDevTools)
-      .SetMethod("isDevToolsOpened", &MesonWebContentsBinding::IsDevToolsOpened)
-      .SetMethod("isDevToolsFocused", &MesonWebContentsBinding::IsDevToolsFocused)
-      .SetMethod("enableDeviceEmulation", &MesonWebContentsBinding::EnableDeviceEmulation)
-      .SetMethod("disableDeviceEmulation", &MesonWebContentsBinding::DisableDeviceEmulation)
-      .SetMethod("toggleDevTools", &MesonWebContentsBinding::ToggleDevTools)
-      .SetMethod("inspectElement", &MesonWebContentsBinding::InspectElement)
-      .SetMethod("setAudioMuted", &MesonWebContentsBinding::SetAudioMuted)
-      .SetMethod("isAudioMuted", &MesonWebContentsBinding::IsAudioMuted)
-      .SetMethod("undo", &MesonWebContentsBinding::Undo)
-      .SetMethod("redo", &MesonWebContentsBinding::Redo)
-      .SetMethod("cut", &MesonWebContentsBinding::Cut)
-      .SetMethod("copy", &MesonWebContentsBinding::Copy)
-      .SetMethod("paste", &MesonWebContentsBinding::Paste)
-      .SetMethod("pasteAndMatchStyle", &MesonWebContentsBinding::PasteAndMatchStyle)
-      .SetMethod("delete", &MesonWebContentsBinding::Delete)
-      .SetMethod("selectAll", &MesonWebContentsBinding::SelectAll)
-      .SetMethod("unselect", &MesonWebContentsBinding::Unselect)
-      .SetMethod("replace", &MesonWebContentsBinding::Replace)
-      .SetMethod("replaceMisspelling", &MesonWebContentsBinding::ReplaceMisspelling)
-      .SetMethod("findInPage", &MesonWebContentsBinding::FindInPage)
-      .SetMethod("stopFindInPage", &MesonWebContentsBinding::StopFindInPage)
-      .SetMethod("focus", &MesonWebContentsBinding::Focus)
-      .SetMethod("isFocused", &MesonWebContentsBinding::IsFocused)
-      .SetMethod("tabTraverse", &MesonWebContentsBinding::TabTraverse)
-      .SetMethod("_send", &MesonWebContentsBinding::SendIPCMessage)
-      .SetMethod("sendInputEvent", &MesonWebContentsBinding::SendInputEvent)
-      .SetMethod("beginFrameSubscription", &MesonWebContentsBinding::BeginFrameSubscription)
-      .SetMethod("endFrameSubscription", &MesonWebContentsBinding::EndFrameSubscription)
-      .SetMethod("startDrag", &MesonWebContentsBinding::StartDrag)
-      .SetMethod("setSize", &MesonWebContentsBinding::SetSize)
-      .SetMethod("isGuest", &MesonWebContentsBinding::IsGuest)
-      .SetMethod("isOffscreen", &MesonWebContentsBinding::IsOffScreen)
-      .SetMethod("startPainting", &MesonWebContentsBinding::StartPainting)
-      .SetMethod("stopPainting", &MesonWebContentsBinding::StopPainting)
-      .SetMethod("isPainting", &MesonWebContentsBinding::IsPainting)
-      .SetMethod("setFrameRate", &MesonWebContentsBinding::SetFrameRate)
-      .SetMethod("getFrameRate", &MesonWebContentsBinding::GetFrameRate)
-      .SetMethod("invalidate", &MesonWebContentsBinding::Invalidate)
-      .SetMethod("getType", &MesonWebContentsBinding::GetType)
-      .SetMethod("getWebPreferences", &MesonWebContentsBinding::GetWebPreferences)
-      .SetMethod("getOwnerBrowserWindow", &MesonWebContentsBinding::GetOwnerBrowserWindow)
-      .SetMethod("hasServiceWorker", &MesonWebContentsBinding::HasServiceWorker)
+    .SetMethod("getId", &WebContentsBinding::GetWebContentsID)
+      .SetMethod("getProcessId", &WebContentsBinding::GetProcessID)
+      .SetMethod("equal", &WebContentsBinding::Equal)
+      .SetMethod("_loadURL", &WebContentsBinding::LoadURL)
+      .SetMethod("downloadURL", &WebContentsBinding::DownloadURL)
+      .SetMethod("_getURL", &WebContentsBinding::GetURL)
+      .SetMethod("getTitle", &WebContentsBinding::GetTitle)
+      .SetMethod("isLoading", &WebContentsBinding::IsLoading)
+      .SetMethod("isLoadingMainFrame", &WebContentsBinding::IsLoadingMainFrame)
+      .SetMethod("isWaitingForResponse", &WebContentsBinding::IsWaitingForResponse)
+      .SetMethod("_stop", &WebContentsBinding::Stop)
+      .SetMethod("_goBack", &WebContentsBinding::GoBack)
+      .SetMethod("_goForward", &WebContentsBinding::GoForward)
+      .SetMethod("_goToOffset", &WebContentsBinding::GoToOffset)
+      .SetMethod("isCrashed", &WebContentsBinding::IsCrashed)
+      .SetMethod("setUserAgent", &WebContentsBinding::SetUserAgent)
+      .SetMethod("getUserAgent", &WebContentsBinding::GetUserAgent)
+      .SetMethod("insertCSS", &WebContentsBinding::InsertCSS)
+      .SetMethod("savePage", &WebContentsBinding::SavePage)
+      .SetMethod("openDevTools", &WebContentsBinding::OpenDevTools)
+      .SetMethod("closeDevTools", &WebContentsBinding::CloseDevTools)
+      .SetMethod("isDevToolsOpened", &WebContentsBinding::IsDevToolsOpened)
+      .SetMethod("isDevToolsFocused", &WebContentsBinding::IsDevToolsFocused)
+      .SetMethod("enableDeviceEmulation", &WebContentsBinding::EnableDeviceEmulation)
+      .SetMethod("disableDeviceEmulation", &WebContentsBinding::DisableDeviceEmulation)
+      .SetMethod("toggleDevTools", &WebContentsBinding::ToggleDevTools)
+      .SetMethod("inspectElement", &WebContentsBinding::InspectElement)
+      .SetMethod("setAudioMuted", &WebContentsBinding::SetAudioMuted)
+      .SetMethod("isAudioMuted", &WebContentsBinding::IsAudioMuted)
+      .SetMethod("undo", &WebContentsBinding::Undo)
+      .SetMethod("redo", &WebContentsBinding::Redo)
+      .SetMethod("cut", &WebContentsBinding::Cut)
+      .SetMethod("copy", &WebContentsBinding::Copy)
+      .SetMethod("paste", &WebContentsBinding::Paste)
+      .SetMethod("pasteAndMatchStyle", &WebContentsBinding::PasteAndMatchStyle)
+      .SetMethod("delete", &WebContentsBinding::Delete)
+      .SetMethod("selectAll", &WebContentsBinding::SelectAll)
+      .SetMethod("unselect", &WebContentsBinding::Unselect)
+      .SetMethod("replace", &WebContentsBinding::Replace)
+      .SetMethod("replaceMisspelling", &WebContentsBinding::ReplaceMisspelling)
+      .SetMethod("findInPage", &WebContentsBinding::FindInPage)
+      .SetMethod("stopFindInPage", &WebContentsBinding::StopFindInPage)
+      .SetMethod("focus", &WebContentsBinding::Focus)
+      .SetMethod("isFocused", &WebContentsBinding::IsFocused)
+      .SetMethod("tabTraverse", &WebContentsBinding::TabTraverse)
+      .SetMethod("_send", &WebContentsBinding::SendIPCMessage)
+      .SetMethod("sendInputEvent", &WebContentsBinding::SendInputEvent)
+      .SetMethod("beginFrameSubscription", &WebContentsBinding::BeginFrameSubscription)
+      .SetMethod("endFrameSubscription", &WebContentsBinding::EndFrameSubscription)
+      .SetMethod("startDrag", &WebContentsBinding::StartDrag)
+      .SetMethod("setSize", &WebContentsBinding::SetSize)
+      .SetMethod("isGuest", &WebContentsBinding::IsGuest)
+      .SetMethod("isOffscreen", &WebContentsBinding::IsOffScreen)
+      .SetMethod("startPainting", &WebContentsBinding::StartPainting)
+      .SetMethod("stopPainting", &WebContentsBinding::StopPainting)
+      .SetMethod("isPainting", &WebContentsBinding::IsPainting)
+      .SetMethod("setFrameRate", &WebContentsBinding::SetFrameRate)
+      .SetMethod("getFrameRate", &WebContentsBinding::GetFrameRate)
+      .SetMethod("invalidate", &WebContentsBinding::Invalidate)
+      .SetMethod("getType", &WebContentsBinding::GetType)
+      .SetMethod("getWebPreferences", &WebContentsBinding::GetWebPreferences)
+      .SetMethod("getOwnerBrowserWindow", &WebContentsBinding::GetOwnerBrowserWindow)
+      .SetMethod("hasServiceWorker", &WebContentsBinding::HasServiceWorker)
       .SetMethod("unregisterServiceWorker",
-                 &MesonWebContentsBinding::UnregisterServiceWorker)
-      .SetMethod("inspectServiceWorker", &MesonWebContentsBinding::InspectServiceWorker)
-      .SetMethod("print", &MesonWebContentsBinding::Print)
-      .SetMethod("_printToPDF", &MesonWebContentsBinding::PrintToPDF)
-      .SetMethod("addWorkSpace", &MesonWebContentsBinding::AddWorkSpace)
-      .SetMethod("removeWorkSpace", &MesonWebContentsBinding::RemoveWorkSpace)
+                 &WebContentsBinding::UnregisterServiceWorker)
+      .SetMethod("inspectServiceWorker", &WebContentsBinding::InspectServiceWorker)
+      .SetMethod("print", &WebContentsBinding::Print)
+      .SetMethod("_printToPDF", &WebContentsBinding::PrintToPDF)
+      .SetMethod("addWorkSpace", &WebContentsBinding::AddWorkSpace)
+      .SetMethod("removeWorkSpace", &WebContentsBinding::RemoveWorkSpace)
       .SetMethod("showDefinitionForSelection",
-                 &MesonWebContentsBinding::ShowDefinitionForSelection)
-      .SetMethod("copyImageAt", &MesonWebContentsBinding::CopyImageAt)
-      .SetMethod("capturePage", &MesonWebContentsBinding::CapturePage)
-      .SetMethod("setEmbedder", &MesonWebContentsBinding::SetEmbedder)
-      .SetProperty("id", &MesonWebContentsBinding::ID)
-      .SetProperty("session", &MesonWebContentsBinding::Session)
-      .SetProperty("hostWebContents", &MesonWebContentsBinding::HostWebContents)
-      .SetProperty("devToolsWebContents", &MesonWebContentsBinding::DevToolsWebContents)
-      .SetProperty("debugger", &MesonWebContentsBinding::Debugger);
+                 &WebContentsBinding::ShowDefinitionForSelection)
+      .SetMethod("copyImageAt", &WebContentsBinding::CopyImageAt)
+      .SetMethod("capturePage", &WebContentsBinding::CapturePage)
+      .SetMethod("setEmbedder", &WebContentsBinding::SetEmbedder)
+      .SetProperty("id", &WebContentsBinding::ID)
+      .SetProperty("session", &WebContentsBinding::Session)
+      .SetProperty("hostWebContents", &WebContentsBinding::HostWebContents)
+      .SetProperty("devToolsWebContents", &WebContentsBinding::DevToolsWebContents)
+      .SetProperty("debugger", &WebContentsBinding::Debugger);
 }
 #endif
 
-void MesonWebContentsBinding::OnRendererMessage(const base::string16& channel, const base::ListValue& args) {
+void WebContentsBinding::OnRendererMessage(const base::string16& channel, const base::ListValue& args) {
   // webContents.emit(channel, new Event(), args...);
   //TODO:
   // senderが自分自身
@@ -1479,19 +1603,30 @@ void MesonWebContentsBinding::OnRendererMessage(const base::string16& channel, c
   EmitEvent(base::UTF16ToUTF8(channel) /*, args*/);
 }
 
-void MesonWebContentsBinding::OnRendererMessageSync(const base::string16& channel, const base::ListValue& args, IPC::Message* message) {
+void WebContentsBinding::OnRendererMessageSync(const base::string16& channel, const base::ListValue& args, IPC::Message* message) {
   // webContents.emit(channel, new Event(sender, message), args...);
-  //TODO:
-  //EmitWithSender(base::UTF16ToUTF8(channel), web_contents(), message /*, args*/);
   LOG(INFO) << __PRETTY_FUNCTION__ << "(" << channel << ", " << args << ")";
-  EmitEvent(base::UTF16ToUTF8(channel), /*web_contents(), */ message /*, args*/);
+  EmitEvent(base::UTF16ToUTF8(channel), "message", /*web_contents(), */ message /*, args*/);
 }
 
-MesonWebContentsBindingFactory::MesonWebContentsBindingFactory(void) {
+WebContentsClassBinding::WebContentsClassBinding(void)
+    : APIClassBindingT(MESON_OBJECT_TYPE_WEB_CONTENTS) {}
+WebContentsClassBinding::~WebContentsClassBinding() {
 }
-MesonWebContentsBindingFactory::~MesonWebContentsBindingFactory(void) {
+
+api::MethodResult WebContentsClassBinding::CreateInstance(const api::APIArgs& args) {
+  const base::DictionaryValue* opt = nullptr;
+  if (!args.GetDictionary(0, &opt)) {
+    return api::MethodResult("invalid argument");
+  }
+  scoped_refptr<WebContentsBinding> ret(NewInstance(*opt));
+  return api::MethodResult(ret);
 }
-APIBinding* MesonWebContentsBindingFactory::Create(unsigned int id, const api::APICreateArg& args) {
-  return new MesonWebContentsBinding(id, std::move(args));
+
+scoped_refptr<WebContentsBinding> WebContentsClassBinding::NewInstance(const base::DictionaryValue& args) {
+  auto id = GetNextBindingID();
+  scoped_refptr<WebContentsBinding> binding = new WebContentsBinding(id, args);
+  SetBinding(id, binding);
+  return binding;
 }
 }

@@ -4,7 +4,7 @@
 #include "content/public/browser/web_contents_observer.h"
 
 namespace meson {
-class MesonWebContentsBinding;
+class WebContentsBinding;
 
 // A struct of parameters for SetSize(). The parameters are all declared as
 // scoped pointers since they are all optional. Null pointers indicate that the
@@ -28,7 +28,7 @@ class WebViewGuestDelegate : public content::BrowserPluginGuestDelegate,
   WebViewGuestDelegate();
   ~WebViewGuestDelegate() override;
 
-  void Initialize(MesonWebContentsBinding* api_web_contents);
+  void Initialize(WebContentsBinding* api_web_contents);
 
   // Called when the WebContents is going to be destroyed.
   void Destroy();
@@ -90,9 +90,8 @@ class WebViewGuestDelegate : public content::BrowserPluginGuestDelegate,
   // Whether the guest view is inside a plugin document.
   bool is_full_page_plugin_;
 
-  MesonWebContentsBinding* api_web_contents_;
+  WebContentsBinding* api_web_contents_;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewGuestDelegate);
 };
-
 }

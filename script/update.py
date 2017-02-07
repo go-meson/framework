@@ -6,11 +6,13 @@ import subprocess
 
 from lib.config import get_target_arch
 from lib.util import get_host_arch
+from create_framework_version_h import create_framework_version_h
 
 SOURCE_ROOT = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
 def main():
     os.chdir(SOURCE_ROOT)
+    create_framework_version_h()
     return update_gyp()
 
 def update_gyp():

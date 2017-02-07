@@ -11,14 +11,14 @@
 #include "browser/web_view_manager.h"
 
 namespace meson {
-class MesonSessionBinding;
+class SessionBinding;
 class MesonBrowserContext : public brightray::BrowserContext {
  public:
-  MesonBrowserContext(MesonSessionBinding* binding, const std::string& partition, bool is_memory, const base::DictionaryValue& args);
+  MesonBrowserContext(SessionBinding* binding, const std::string& partition, bool is_memory, const base::DictionaryValue& args);
   virtual ~MesonBrowserContext(void);
 
  public:
-  static scoped_refptr<MesonBrowserContext> From(MesonSessionBinding* binding,
+  static scoped_refptr<MesonBrowserContext> From(SessionBinding* binding,
                                                  const std::string& partition,
                                                  bool is_memory,
                                                  const base::DictionaryValue& args);
@@ -27,7 +27,7 @@ class MesonBrowserContext : public brightray::BrowserContext {
   content::BrowserPluginGuestManager* GetGuestManager() override;
 
  private:
-  base::WeakPtr<APIBinding> binding_;
+  base::WeakPtr<SessionBinding> binding_;
   std::string user_agent_;
   bool use_cache_;
   std::unique_ptr<WebViewManager> guest_manager_;

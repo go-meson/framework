@@ -6,8 +6,7 @@
 
 namespace meson {
 API* API::self_ = nullptr;
-API::API()
-    : next_binding_id_(0) {
+API::API() {
   CHECK(!self_) << "API already created";
   self_ = this;
 }
@@ -17,21 +16,19 @@ API* API::Get() {
   return self_;
 }
 
-void API::InstallBindings(MESON_OBJECT_TYPE type, APIBindingFactory* factory) {
-  DLOG(INFO) << "[API] INSTALL: " << type;
-  factories_[type] = std::unique_ptr<APIBindingFactory>(factory);
-}
-
-void API::setBinding(unsigned int id, APIBinding* binding) {
+#if 0
+  //TODO:
+void API::setBinding(MESON_OBJECT_TYPE t, unsigned int id, APIBinding* binding) {
   base::subtle::AutoWriteLock l(apiLock_);
-  bindings_[id] = base::AsWeakPtr(binding);
+  bindings_[t][id] = base::AsWeakPtr(binding);
 }
 
 scoped_refptr<APIBinding> API::CreateAppBinding() {
   base::subtle::AutoWriteLock l(apiLock_);
   if (bindings_.empty()) {
-    scoped_refptr<APIBinding> binding = new MesonAppBinding(MESON_OBJID_APP);
-    bindings_[MESON_OBJID_APP] = base::AsWeakPtr(binding.get());
+    // ? staticバインディングはどうする？
+    scoped_refptr<APIBinding> binding = new MesonAppBinding(MESON_OBJID_STATIC);
+    bindings_[MESON_OBJECT_TYPE_APP][MESON_OBJID_STATIC] = base::AsWeakPtr(binding.get());
     return binding;
   } else {
     return bindings_[MESON_OBJID_APP].get();
@@ -44,7 +41,7 @@ scoped_refptr<APIBinding> API::Create(MESON_OBJECT_TYPE type, const api::APICrea
     LOG(ERROR) << "[API] CREATE: " << type << " is not registerd.";
     return nullptr;
   }
-  target_id = GetNewBindingID();
+  target_id = GetNewBindingID(type);
   DLOG(INFO) << "[API] CREATE: " << type << " : " << target_id;
   scoped_refptr<APIBinding> binding(factories_[type]->Create(target_id, args));
   setBinding(target_id, binding.get());
@@ -128,4 +125,5 @@ scoped_refptr<APIBindingRemoteList> API::GetRemote(unsigned int target) {
   }
   return ret;
 }
+#endif
 }
