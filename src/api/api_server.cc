@@ -462,7 +462,7 @@ void APIServer::StartHandlerThread() {
   }
 
   DLOG(INFO) << __PRETTY_FUNCTION__;
-  thread_->message_loop()->PostTask(FROM_HERE, base::Bind(&APIServer::ThreadRun, this));
+  thread_->message_loop()->task_runner()->PostTask(FROM_HERE, base::Bind(&APIServer::ThreadRun, this));
   // call start first run
   mesonApiCallInitHandler();
 }
@@ -474,7 +474,7 @@ void APIServer::StopHandlerThread() {
   DLOG(INFO) << __PRETTY_FUNCTION__;
   if (!thread_->message_loop())
     return;
-  thread_->message_loop()->PostTask(FROM_HERE, base::Bind(&APIServer::ThreadTearDown, this));
+  thread_->message_loop()->task_runner()->PostTask(FROM_HERE, base::Bind(&APIServer::ThreadTearDown, this));
   thread_->Stop();
 }
 
@@ -488,7 +488,7 @@ void APIServer::ThreadRun() {
   }
 
   /* Finally we loop */
-  thread_->message_loop()->PostTask(FROM_HERE, base::Bind(&APIServer::ThreadRun, this));
+  thread_->message_loop()->task_runner()->PostTask(FROM_HERE, base::Bind(&APIServer::ThreadRun, this));
 }
 
 void APIServer::ThreadTearDown() {

@@ -81,6 +81,7 @@ extern const char kNodeIntegration[];
 extern const char kGuestInstanceID[];
 extern const char kOpenerID[];
 extern const char kScrollBounce[];
+extern const char kHiddenPage[];
 
 extern const char kWidevineCdmPath[];
 extern const char kWidevineCdmVersion[];

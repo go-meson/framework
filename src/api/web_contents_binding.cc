@@ -7,7 +7,6 @@
 #include "api/api_messages.h"
 #include "browser/web_contents_permission_helper.h"
 #include "browser/web_contents_preferences.h"
-#include "browser/meson_security_state_model_client.h"
 #include "browser/native_window.h"
 #include "browser/browser_client.h"
 #include "common/options_switches.h"
@@ -30,11 +29,39 @@
 #include "content/public/browser/download_manager.h"
 #include "content/common/view_messages.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "third_party/WebKit/public/web/WebFindOptions.h"
 
 #include "browser/web_view_manager.h"
 #include "browser/web_view_guest_delegate.h"
 
+namespace {
+std::string WindowOpenDispositionToString(WindowOpenDisposition disposition) {
+  std::string str_disposition = "other";
+  switch (disposition) {
+  case WindowOpenDisposition::CURRENT_TAB:
+    str_disposition = "default";
+    break;
+  case WindowOpenDisposition::NEW_FOREGROUND_TAB:
+    str_disposition = "foreground-tab";
+    break;
+  case WindowOpenDisposition::NEW_BACKGROUND_TAB:
+    str_disposition = "background-tab";
+    break;
+  case WindowOpenDisposition::NEW_POPUP:
+  case WindowOpenDisposition::NEW_WINDOW:
+    str_disposition = "new-window";
+    break;
+  case WindowOpenDisposition::SAVE_TO_DISK:
+    str_disposition = "save-to-disk";
+    break;
+  default:
+    break;
+  }
+  return str_disposition;
+}
+}
 namespace meson {
 template <>
 const APIBindingT<WebContentsBinding, WebContentsClassBinding>::MethodTable APIBindingT<WebContentsBinding, WebContentsClassBinding>::methodTable = {};
@@ -114,8 +141,10 @@ WebContentsBinding::WebContentsBinding(api::ObjID id, const base::DictionaryValu
   // Save the preferences in C++.
   new WebContentsPreferences(web_contents, args);
 
+  // Intialize permission helper.
   WebContentsPermissionHelper::CreateForWebContents(web_contents);
-  MesonSecurityStateModelClient::CreateForWebContents(web_contents);
+  // Intialize security state client.
+  SecurityStateTabHelper::CreateForWebContents(web_contents);
 
   web_contents->SetUserAgentOverride(GetBrowserContext()->GetUserAgent());
 
@@ -154,11 +183,11 @@ MesonBrowserContext* WebContentsBinding::GetBrowserContext() const {
   return static_cast<MesonBrowserContext*>(web_contents()->GetBrowserContext());
 }
 
-bool WebContentsBinding::AddMessageToConsole(content::WebContents* source,
-                                             int32_t level,
-                                             const base::string16& message,
-                                             int32_t line_no,
-                                             const base::string16& source_id) {
+bool WebContentsBinding::DidAddMessageToConsole(content::WebContents* source,
+                                                int32_t level,
+                                                const base::string16& message,
+                                                int32_t line_no,
+                                                const base::string16& source_id) {
   if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN) {
     return false;
   } else {
@@ -180,17 +209,18 @@ void WebContentsBinding::OnCreateWindow(const GURL& target_url,
     EmitEvent("-new-window",
               "url", target_url,
               "frameName", frame_name,
-              "disposition", disposition,
+              "disposition", WindowOpenDispositionToString(disposition),
               "features", features);
   else
     EmitEvent("new-window",
               "url", target_url,
               "frameName", frame_name,
-              "disposition", disposition,
+              "disposition", WindowOpenDispositionToString(disposition),
               "features", features);
 }
 
 void WebContentsBinding::WebContentsCreated(content::WebContents* source_contents,
+                                            int opener_render_process_id,
                                             int opener_render_frame_id,
                                             const std::string& frame_name,
                                             const GURL& target_url,
@@ -226,7 +256,7 @@ void WebContentsBinding::AddNewContents(content::WebContents* source,
 #endif
   EmitEvent("-add-new-contents",
             "id", api_web_contents,
-            "disposition", disposition,
+            "disposition", WindowOpenDispositionToString(disposition),
             "userGesture", user_gesture,
             "initialRect", initial_rect);
 }
@@ -234,17 +264,17 @@ void WebContentsBinding::AddNewContents(content::WebContents* source,
 content::WebContents* WebContentsBinding::OpenURLFromTab(content::WebContents* source,
                                                          const content::OpenURLParams& params) {
   LOG(INFO) << __PRETTY_FUNCTION__;
-  if (params.disposition != CURRENT_TAB) {
+  if (params.disposition != WindowOpenDisposition::CURRENT_TAB) {
     if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN)
       EmitEvent("-new-window",
                 "url", params.url,
                 "frameName", "",
-                "disposition", params.disposition);
+                "disposition", WindowOpenDispositionToString(params.disposition));
     else
       EmitEvent("new-window",
                 "url", params.url,
                 "frameName", "",
-                "disposition", params.disposition);
+                "disposition", WindowOpenDispositionToString(params.disposition));
     return nullptr;
   }
 
@@ -327,7 +357,7 @@ void WebContentsBinding::ExitFullscreenModeForTab(content::WebContents* source) 
   EmitEvent("leave-html-full-screen");
 }
 
-void WebContentsBinding::RendererUnresponsive(content::WebContents* source) {
+void WebContentsBinding::RendererUnresponsive(content::WebContents* source, const content::WebContentsUnresponsiveState& unresponsive_state) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   EmitEvent("unresponsive");
   if ((type_ == BROWSER_WINDOW || type_ == OFF_SCREEN) && owner_window())
@@ -547,12 +577,12 @@ void WebContentsBinding::PluginCrashed(const base::FilePath& plugin_path, base::
   EmitEvent("plugin-crashed", "name", info.name, "version", info.version);
 }
 
-void WebContentsBinding::MediaStartedPlaying(const MediaPlayerId& id) {
+void WebContentsBinding::MediaStartedPlaying(const MediaPlayerInfo& video_type, const MediaPlayerId& id) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   EmitEvent("media-started-playing");
 }
 
-void WebContentsBinding::MediaStoppedPlaying(const MediaPlayerId& id) {
+void WebContentsBinding::MediaStoppedPlaying(const MediaPlayerInfo& video_type, const MediaPlayerId& id) {
   LOG(INFO) << __PRETTY_FUNCTION__;
   EmitEvent("media-paused");
 }
@@ -628,7 +658,7 @@ void WebContentsBinding::DidGetResourceResponseStart(const content::ResourceRequ
             "resourceType", details.resource_type);
 }
 
-void WebContentsBinding::DidGetRedirectForResourceRequest(content::RenderFrameHost* render_frame_host, const content::ResourceRedirectDetails& details) {
+void WebContentsBinding::DidGetRedirectForResourceRequest(const content::ResourceRedirectDetails& details) {
   std::unique_ptr<base::DictionaryValue> h(ToDict(details.headers));
   EmitEvent("did-get-redirect-request",
             "oldURL", details.url,
@@ -923,10 +953,6 @@ std::string WebContentsBinding::GetUserAgent() {
   return web_contents()->GetUserAgentOverride();
 }
 
-void WebContentsBinding::InsertCSS(const std::string& css) {
-  web_contents()->InsertCSS(css);
-}
-
 #if 0
 bool WebContentsBinding::SavePage(const base::FilePath& full_file_path,
                                        const content::SavePageType& save_type,
@@ -1015,8 +1041,7 @@ void WebContentsBinding::InspectElement(int x, int y) {
 
   if (!managed_web_contents()->GetDevToolsWebContents())
     OpenDevTools(nullptr);
-  scoped_refptr<content::DevToolsAgentHost> agent(content::DevToolsAgentHost::GetOrCreateFor(web_contents()));
-  agent->InspectElement(x, y);
+  managed_web_contents()->InspectElement(x, y);
 }
 
 void WebContentsBinding::InspectServiceWorker() {
@@ -1027,7 +1052,7 @@ void WebContentsBinding::InspectServiceWorker() {
     return;
 
   for (const auto& agent_host : content::DevToolsAgentHost::GetOrCreateAll()) {
-    if (agent_host->GetType() == content::DevToolsAgentHost::TYPE_SERVICE_WORKER) {
+    if (agent_host->GetType() == content::DevToolsAgentHost::kTypeServiceWorker) {
       OpenDevTools(nullptr);
       managed_web_contents()->AttachTo(agent_host);
       break;

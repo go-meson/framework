@@ -1,6 +1,8 @@
 {
   'variables': {
     'lib_sources': [
+        'chromium_src/chrome/browser/ssl/security_state_tab_helper.cc',
+        'chromium_src/chrome/browser/ssl/security_state_tab_helper.h',
         'src/api/api.h',
         'src/api/api.cc',
         'src/api/api_base.h',
@@ -48,11 +50,8 @@
         'src/browser/common_web_contents_delegate_mac.mm',
         'src/browser/meson_javascript_dialog_manager.h',
         'src/browser/meson_javascript_dialog_manager.cc',
-        'src/browser/meson_security_state_model_client.h',
-        'src/browser/meson_security_state_model_client.cc',
         'src/browser/meson_permission_manager.h',
         'src/browser/meson_permission_manager.cc',
-        'src/browser/meson_web_contents.h',
         'src/browser/meson_window.h',
         'src/browser/meson_window.cc',
         'src/browser/native_window.h',

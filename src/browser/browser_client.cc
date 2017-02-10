@@ -58,7 +58,6 @@ void MesonBrowserClient::OverrideWebkitPrefs(content::RenderViewHost* host, cont
   prefs->allow_universal_access_from_file_urls = true;
   prefs->allow_file_access_from_file_urls = true;
   prefs->experimental_webgl_enabled = true;
-  prefs->allow_displaying_insecure_content = false;
   prefs->allow_running_insecure_content = false;
 
   // Custom preferences of guest page.
@@ -157,13 +156,11 @@ void MesonBrowserClient::AllowCertificateError(content::WebContents* web_content
                                                bool overridable,
                                                bool strict_enforcement,
                                                bool expired_previous_decision,
-                                               const base::Callback<void(bool)>& callback,
-                                               content::CertificateRequestResultType* request) {
+                                               const base::Callback<void(content::CertificateRequestResultType)>& callback) {
   if (delegate_) {
-    delegate_->AllowCertificateError(
-        web_contents, cert_error, ssl_info, request_url,
-        resource_type, overridable, strict_enforcement,
-        expired_previous_decision, callback, request);
+    delegate_->AllowCertificateError(web_contents, cert_error, ssl_info, request_url,
+                                     resource_type, overridable, strict_enforcement,
+                                     expired_previous_decision, callback);
   }
 }
 
@@ -221,7 +218,7 @@ void MesonBrowserClient::WebNotificationAllowed(int render_process_id, const bas
 content::WebContents* MesonBrowserClient::GetWebContentsFromProcessID(
     int process_id) {
   // If the process is a pending process, we should use the old one.
-  if (ContainsKey(pending_processes_, process_id))
+  if (base::ContainsKey(pending_processes_, process_id))
     process_id = pending_processes_[process_id];
 
   // Certain render process will be created with no associated render view,

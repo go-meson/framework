@@ -20,6 +20,7 @@
 //#include "third_party/WebKit/public/web/WebScopedMicrotaskSuppression.h"
 //#include "third_party/WebKit/public/web/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "v8/include/v8.h"
 
 #include "renderer/extensions/v8_helpers.h"

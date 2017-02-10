@@ -4,6 +4,7 @@
 #include "browser/browser_client.h"
 #include "browser/native_window.h"
 #include "common/options_switches.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "api/session_binding.h"
 #include "api/web_contents_binding.h"
 #include "api/api.h"
@@ -89,7 +90,9 @@ WindowBinding::~WindowBinding(void) {
   if (!window_->IsClosed()) {
     window_->CloseContents(nullptr);
   }
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, window_.release());
+  // Destroy the native window in next tick because the native code might be
+  // iterating all windows.
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, window_.release());
 }
 
 void WindowBinding::WillCloseWindow(bool* prevent_default) {
@@ -136,9 +139,7 @@ void WindowBinding::OnWindowClosed() {
 //RemoveFromParentChildWindows();
 
 // Destroy the native class when window is closed.
-#if 1
-  base::MessageLoop::current()->PostTask(FROM_HERE, base::Bind(windowFinalizer, self));
-#endif
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, base::Bind(windowFinalizer, self));
 }
 
 void WindowBinding::OnWindowBlur() {

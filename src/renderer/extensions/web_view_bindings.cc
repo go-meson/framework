@@ -380,11 +380,8 @@ void WebViewBindings::InsertCSS(const v8::FunctionCallbackInfo<v8::Value>& args)
   int guest_instance_id = args[0]->NumberValue();
   std::string css(*v8::String::Utf8Value(args[1]));
 
-  LOG(INFO) << "WEB_VIEW_BINDINGS: InsertCSS " << guest_instance_id;
+  LOG(INFO) << "WEB_VIEW_BINDINGS: InsertCSS " << guest_instance_id << " is not implement";
 
-  render_frame_observer_->Send(new MesonFrameHostMsg_WebViewGuestInsertCSS(
-      render_frame_observer_->routing_id(),
-      guest_instance_id, css));
 }
 
 void WebViewBindings::ExecuteScript(const v8::FunctionCallbackInfo<v8::Value>& args) {

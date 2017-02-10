@@ -4,7 +4,7 @@ import sys
 import os
 
 BASE_URL = 'https://s3.amazonaws.com/github-janky-artifacts/libchromiumcontent'
-LIBCHROMIUMCONTENT_COMMIT = '82751b122d7f5cbedee5c662acc8cd1f1be8036d'
+LIBCHROMIUMCONTENT_COMMIT = 'e0da1e9caa7c8f3da3519963a9ea32abba43c7c8'
 
 PLATFORM = {
     'cygwin': 'win32',

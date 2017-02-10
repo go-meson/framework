@@ -62,7 +62,7 @@ class CommonWebContentsDelegate
   void EnterFullscreenModeForTab(content::WebContents* source, const GURL& origin) override;
   void ExitFullscreenModeForTab(content::WebContents* source) override;
   bool IsFullscreenForTabOrPending(const content::WebContents* source) const override;
-  content::SecurityStyle GetSecurityStyle(content::WebContents* web_contents, content::SecurityStyleExplanations* explanations) override;
+  blink::WebSecurityStyle GetSecurityStyle(content::WebContents* web_contents, content::SecurityStyleExplanations* explanations) override;
   void HandleKeyboardEvent(content::WebContents* source, const content::NativeWebKeyboardEvent& event) override;
 
   // brightray::InspectableWebContentsDelegate:

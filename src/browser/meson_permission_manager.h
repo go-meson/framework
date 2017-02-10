@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/id_map.h"
 #include "content/public/browser/permission_manager.h"
 
 namespace content {
@@ -18,8 +19,9 @@ class MesonPermissionManager : public content::PermissionManager {
   MesonPermissionManager();
   ~MesonPermissionManager() override;
 
-  using ResponseCallback = base::Callback<void(blink::mojom::PermissionStatus)>;
-  using RequestHandler = base::Callback<void(content::WebContents*, content::PermissionType, const ResponseCallback&)>;
+  using StatusCallback = base::Callback<void(blink::mojom::PermissionStatus)>;
+  using StatusesCallback = base::Callback<void(const std::vector<blink::mojom::PermissionStatus>&)>;
+  using RequestHandler = base::Callback<void(content::WebContents*, content::PermissionType, const StatusCallback&)>;
 
   // Handler to dispatch permission requests in JS.
   void SetPermissionRequestHandler(const RequestHandler& handler);
@@ -28,14 +30,16 @@ class MesonPermissionManager : public content::PermissionManager {
   int RequestPermission(content::PermissionType permission,
                         content::RenderFrameHost* render_frame_host,
                         const GURL& requesting_origin,
-                        const ResponseCallback& callback) override;
+                        bool user_gesture,
+                        const base::Callback<void(blink::mojom::PermissionStatus)>& callback) override;
   int RequestPermissions(const std::vector<content::PermissionType>& permissions,
                          content::RenderFrameHost* render_frame_host,
                          const GURL& requesting_origin,
+                         bool user_gesture,
                          const base::Callback<void(const std::vector<blink::mojom::PermissionStatus>&)>& callback) override;
 
  protected:
-  void OnPermissionResponse(int request_id, const GURL& url, const ResponseCallback& callback, blink::mojom::PermissionStatus status);
+  void OnPermissionResponse(int request_id, int permission_id, blink::mojom::PermissionStatus status);
   // content::PermissionManager:
   void CancelPermissionRequest(int request_id) override;
   void ResetPermission(content::PermissionType permission, const GURL& requesting_origin, const GURL& embedding_origin) override;
@@ -48,14 +52,12 @@ class MesonPermissionManager : public content::PermissionManager {
   void UnsubscribePermissionStatusChange(int subscription_id) override;
 
  private:
-  struct RequestInfo {
-    int render_process_id;
-    ResponseCallback callback;
-  };
+  class PendingRequest;
+  using PendingRequestMap = IDMap<PendingRequest, IDMapOwnPointer>;
 
   RequestHandler request_handler_;
-  std::map<int, RequestInfo> pending_requests_;
-  int request_id_;
+
+  PendingRequestMap pending_requests_;
 
   DISALLOW_COPY_AND_ASSIGN(MesonPermissionManager);
 };

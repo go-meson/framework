@@ -85,7 +85,7 @@ Role kRolesMap[] = {
 - (void)cancel {
   if (isMenuOpen_) {
     [menu_ cancelTracking];
-    model_->MenuClosed();
+    model_->MenuWillClose();
     isMenuOpen_ = NO;
   }
 }
@@ -246,7 +246,7 @@ Role kRolesMap[] = {
 
 - (void)menuDidClose:(NSMenu*)menu {
   if (isMenuOpen_) {
-    model_->MenuClosed();
+    model_->MenuWillClose();
     isMenuOpen_ = NO;
   }
 }

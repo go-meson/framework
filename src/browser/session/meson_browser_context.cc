@@ -36,11 +36,17 @@ MesonBrowserContext::MesonBrowserContext(SessionBinding* binding,
                                     name.c_str(),
                                     browser->GetVersion().c_str(),
                                     CHROME_VERSION);
-    args.GetBoolean("cache", &use_cache_);
   }
-  //TODO: mada
+  content::BuildUserAgentFromProduct(user_agent);
 
+  // Read options.
+  args.GetBoolean("cache", &use_cache_);
+
+  // Initialize Pref Registry in brightray.
   InitPrefs();
+}
+
+MesonBrowserContext::~MesonBrowserContext() {
 }
 
 content::BrowserPluginGuestManager* MesonBrowserContext::GetGuestManager() {
@@ -61,6 +67,4 @@ scoped_refptr<MesonBrowserContext> MesonBrowserContext::From(SessionBinding* bin
 
   return new MesonBrowserContext(binding, partition, is_memory, args);
 }
-
-MesonBrowserContext::~MesonBrowserContext() {}
 }

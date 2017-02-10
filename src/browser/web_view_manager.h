@@ -45,7 +45,6 @@ class WebViewManager : public content::BrowserPluginGuestManager {
   void OnWebViewGuestSetZoom(content::WebContents* web_contents, int guest_instance_id, double zoom_factor);
   void OnWebViewGuestFind(content::WebContents* web_contents, int guest_instance_id, int request_id, const std::string& search_text, const base::DictionaryValue& options);
   void OnWebViewGuestStopFinding(content::WebContents* web_contents, int guest_instance_id, const std::string& action);
-  void OnWebViewGuestInsertCSS(content::WebContents* web_contents, int guest_instance_id, const std::string& css);
   void OnWebViewGuestExecuteScript(content::WebContents* web_contents, int guest_instance_id, const std::string& script);
   void OnWebViewGuestOpenDevTools(content::WebContents* web_contents, int guest_instance_id);
   void OnWebViewGuestCloseDevTools(content::WebContents* web_contents, int guest_instance_id);

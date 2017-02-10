@@ -18,7 +18,7 @@ class MesonMenuModel : public ui::SimpleMenuModel {
 
    private:
     // ui::SimpleMenuModel::Delegate:
-    bool GetAcceleratorForCommandId(int command_id, ui::Accelerator* accelerator) {
+    bool GetAcceleratorForCommandId(int command_id, ui::Accelerator* accelerator) const override {
       return GetAcceleratorForCommandIdWithParams(command_id, false, accelerator);
     }
   };
@@ -28,7 +28,7 @@ class MesonMenuModel : public ui::SimpleMenuModel {
     virtual ~Observer() {}
 
     // Notifies the menu has been closed.
-    virtual void MenuClosed() {}
+    virtual void MenuWillClose() {}
   };
 
   explicit MesonMenuModel(Delegate* delegate);
@@ -42,7 +42,7 @@ class MesonMenuModel : public ui::SimpleMenuModel {
   bool GetAcceleratorAtWithParams(int index, bool use_default_accelerator, ui::Accelerator* accelerator) const;
 
   // ui::SimpleMenuModel:
-  void MenuClosed() override;
+  void MenuWillClose() override;
 
   using SimpleMenuModel::GetSubmenuModelAt;
   MesonMenuModel* GetSubmenuModelAt(int index);

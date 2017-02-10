@@ -60,7 +60,6 @@ class WebContentsBinding : public APIBindingT<WebContentsBinding, WebContentsCla
   bool IsCrashed() const;
   void SetUserAgent(const std::string& user_agent, base::ListValue* args);
   std::string GetUserAgent();
-  void InsertCSS(const std::string& css);
 #if 0
   //TODO:
   bool SavePage(const base::FilePath& full_file_path, const content::SavePageType& save_type, const SavePageHandler::SavePageCallback& callback);
@@ -142,8 +141,8 @@ class WebContentsBinding : public APIBindingT<WebContentsBinding, WebContentsCla
 
  protected:
   // content::WebContentsDelegate:
-  bool AddMessageToConsole(content::WebContents* source, int32_t level, const base::string16& message, int32_t line_no, const base::string16& source_id) override;
-  void WebContentsCreated(content::WebContents* source_contents, int opener_render_frame_id, const std::string& frame_name, const GURL& target_url, content::WebContents* new_contents) override;
+  bool DidAddMessageToConsole(content::WebContents* source, int32_t level, const base::string16& message, int32_t line_no, const base::string16& source_id) override;
+  void WebContentsCreated(content::WebContents* source_contents, int opener_process_id, int opener_render_frame_id, const std::string& frame_name, const GURL& target_url, content::WebContents* new_contents) override;
   void AddNewContents(content::WebContents* source, content::WebContents* new_contents, WindowOpenDisposition disposition, const gfx::Rect& initial_rect, bool user_gesture, bool* was_blocked) override;
   content::WebContents* OpenURLFromTab(content::WebContents* source, const content::OpenURLParams& params) override;
   void BeforeUnloadFired(content::WebContents* tab, bool proceed, bool* proceed_to_fire_unload) override;
@@ -155,7 +154,7 @@ class WebContentsBinding : public APIBindingT<WebContentsBinding, WebContentsCla
   void HandleKeyboardEvent(content::WebContents* source, const content::NativeWebKeyboardEvent& event) override;
   void EnterFullscreenModeForTab(content::WebContents* source, const GURL& origin) override;
   void ExitFullscreenModeForTab(content::WebContents* source) override;
-  void RendererUnresponsive(content::WebContents* source) override;
+  void RendererUnresponsive(content::WebContents* source, const content::WebContentsUnresponsiveState& unresponsive_state) override;
   void RendererResponsive(content::WebContents* source) override;
   bool HandleContextMenu(const content::ContextMenuParams& params) override;
   bool OnGoToEntryOffset(int offset) override;
@@ -175,7 +174,7 @@ class WebContentsBinding : public APIBindingT<WebContentsBinding, WebContentsCla
   void DidStartLoading() override;
   void DidStopLoading() override;
   void DidGetResourceResponseStart(const content::ResourceRequestDetails& details) override;
-  void DidGetRedirectForResourceRequest(content::RenderFrameHost* render_frame_host, const content::ResourceRedirectDetails& details) override;
+  void DidGetRedirectForResourceRequest(const content::ResourceRedirectDetails& details) override;
   void DidFinishNavigation(content::NavigationHandle* navigation_handle) override;
   bool OnMessageReceived(const IPC::Message& message) override;
   void WebContentsDestroyed() override;
@@ -183,8 +182,8 @@ class WebContentsBinding : public APIBindingT<WebContentsBinding, WebContentsCla
   void TitleWasSet(content::NavigationEntry* entry, bool explicit_set) override;
   void DidUpdateFaviconURL(const std::vector<content::FaviconURL>& urls) override;
   void PluginCrashed(const base::FilePath& plugin_path, base::ProcessId plugin_pid) override;
-  void MediaStartedPlaying(const MediaPlayerId& id) override;
-  void MediaStoppedPlaying(const MediaPlayerId& id) override;
+  void MediaStartedPlaying(const MediaPlayerInfo& video_type, const MediaPlayerId& id) override;
+  void MediaStoppedPlaying(const MediaPlayerInfo& video_type, const MediaPlayerId& id) override;
   void DidChangeThemeColor(SkColor theme_color) override;
 
   // brightray::InspectableWebContentsDelegate:

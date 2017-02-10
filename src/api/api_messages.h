@@ -93,11 +93,6 @@ IPC_MESSAGE_ROUTED2(MesonFrameHostMsg_WebViewGuestStopFinding,
                     int, /* guest_instance_id */
                     std::string /* action */)
 
-// WebViewGuestInsertCSS
-IPC_MESSAGE_ROUTED2(MesonFrameHostMsg_WebViewGuestInsertCSS,
-                    int, /* guest_instance_id */
-                    std::string /* css */)
-
 // WebViewGuestExecuteScript
 IPC_MESSAGE_ROUTED2(MesonFrameHostMsg_WebViewGuestExecuteScript,
                     int, /* guest_instance_id */

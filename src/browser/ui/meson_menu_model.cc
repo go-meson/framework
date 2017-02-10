@@ -30,9 +30,10 @@ bool MesonMenuModel::GetAcceleratorAtWithParams(int index, bool use_default_acce
   return false;
 }
 
-void MesonMenuModel::MenuClosed() {
-  ui::SimpleMenuModel::MenuClosed();
-  FOR_EACH_OBSERVER(Observer, observers_, MenuClosed());
+void MesonMenuModel::MenuWillClose() {
+  ui::SimpleMenuModel::MenuWillClose();
+  for (Observer& observer : observers_)
+    observer.MenuWillClose();
 }
 
 MesonMenuModel* MesonMenuModel::GetSubmenuModelAt(int index) {

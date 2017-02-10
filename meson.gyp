@@ -4,7 +4,7 @@
         'product_name%': 'Meson',
         'company_name%': 'GitHub, Inc',
         'company_abbr%': 'github',
-        'version%': '0.0.2',
+        'version%': '0.0.3',
         'js2c_input_dir': '<(SHARED_INTERMEDIATE_DIR)/js2c',
     },
     'includes': [
@@ -15,13 +15,6 @@
         'defines': [
             'MESON_PRODUCT_NAME="<(product_name)"',
             'MESON_PROJECT_NAME="<(project_name)"',
-        ],
-        'conditions': [
-            ['OS=="mac"', {
-                'mac_framework_dirs': [
-                    '<(source_root)/external_binaries',
-                ],
-            }],
         ],
     },
     'targets': [
@@ -91,16 +84,6 @@
                 },
             ],
             'postbuilds': [
-                {
-                    'postbuild_name': 'Fix path of ffmpeg',
-                    'action': [
-                        'install_name_tool',
-                        '-change',
-                        '/usr/local/lib/libffmpeg.dylib',
-                        '@rpath/libffmpeg.dylib',
-                        '${BUILT_PRODUCTS_DIR}/<(product_name).framework/Versions/A/<(product_name)',
-                    ],
-                },
                 {
                 'postbuild_name': 'Add symlinks for framework subdirectories',
                 'action': [

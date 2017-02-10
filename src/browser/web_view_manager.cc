@@ -54,7 +54,7 @@ class WebViewManager::EmbeddedClient final : public base::RefCountedThreadSafe<E
   unsigned int binding_id_;
   scoped_refptr<WebViewBindingRemote> remote_;
 
-public:
+ public:
   EmbeddedClient(WebViewManager& m, scoped_refptr<WebContentsBinding> c)
       : mgr_(m),
         binding_id_(c->GetID()),
@@ -64,7 +64,7 @@ public:
   }
 
   ~EmbeddedClient() {
-    LOG(INFO) << __PRETTY_FUNCTION__ << " (" << (long )this;
+    LOG(INFO) << __PRETTY_FUNCTION__ << " (" << (long)this;
     //LOG(INFO) << __PRETTY_FUNCTION__ << " : " << binding_->GetID();
     WebContentsBinding::Class().RemoveRemote(binding_id_, remote_.get());
   }
@@ -200,8 +200,6 @@ void WebViewManager::AddGuest(int guest_instance_id,
 
 void WebViewManager::RemoveGuest(int guest_instance_id) {
   LOG(INFO) << __PRETTY_FUNCTION__;
-  if (!ContainsKey(web_contents_embedder_map_, guest_instance_id))
-    return;
 
   web_contents_embedder_map_.erase(guest_instance_id);
 
@@ -214,7 +212,7 @@ void WebViewManager::RemoveGuest(int guest_instance_id) {
 }
 
 content::WebContents* WebViewManager::GetEmbedder(int guest_instance_id) {
-  if (ContainsKey(web_contents_embedder_map_, guest_instance_id))
+  if (base::ContainsKey(web_contents_embedder_map_, guest_instance_id))
     return web_contents_embedder_map_[guest_instance_id].embedder;
   else
     return nullptr;
@@ -224,11 +222,11 @@ content::WebContents* WebViewManager::GetGuestByInstanceID(
     int owner_process_id,
     int element_instance_id) {
   ElementInstanceKey key(owner_process_id, element_instance_id);
-  if (!ContainsKey(element_instance_id_to_guest_map_, key))
+  if (!base::ContainsKey(element_instance_id_to_guest_map_, key))
     return nullptr;
 
   int guest_instance_id = element_instance_id_to_guest_map_[key];
-  if (ContainsKey(web_contents_embedder_map_, guest_instance_id))
+  if (base::ContainsKey(web_contents_embedder_map_, guest_instance_id))
     return web_contents_embedder_map_[guest_instance_id].web_contents;
   else
     return nullptr;
@@ -494,15 +492,7 @@ void WebViewManager::OnWebViewGuestStopFinding(content::WebContents* web_content
   }
   api->StopFindInPage(action_value);
 }
-void WebViewManager::OnWebViewGuestInsertCSS(content::WebContents* web_contents, int guest_instance_id, const std::string& css) {
-  LOG(INFO) << __PRETTY_FUNCTION__ << "(" << guest_instance_id << ", " << css << ")";
-  auto fiter = guest_instances_.find(guest_instance_id);
-  CHECK(fiter != guest_instances_.end()) << " invalid guest id.";
-  auto guest = (*fiter).second;
-  auto api = guest->Binding();
-  CHECK(api);
-  api->InsertCSS(css);
-}
+
 void WebViewManager::OnWebViewGuestExecuteScript(content::WebContents* web_contents, int guest_instance_id, const std::string& script) {
   LOG(INFO) << __PRETTY_FUNCTION__ << "(" << guest_instance_id << ", " << script << ")";
   auto fiter = guest_instances_.find(guest_instance_id);

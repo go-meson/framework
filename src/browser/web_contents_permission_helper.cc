@@ -45,7 +45,7 @@ void WebContentsPermissionHelper::RequestPermission(content::PermissionType perm
   auto rfh = web_contents_->GetMainFrame();
   auto permission_manager = static_cast<MesonPermissionManager*>(web_contents_->GetBrowserContext()->GetPermissionManager());
   auto origin = web_contents_->GetLastCommittedURL();
-  permission_manager->RequestPermission(permission, rfh, origin, base::Bind(&OnPermissionResponse, callback));
+  permission_manager->RequestPermission(permission, rfh, origin, false, base::Bind(&OnPermissionResponse, callback));
 }
 
 void WebContentsPermissionHelper::RequestFullscreenPermission(const base::Callback<void(bool)>& callback) {
