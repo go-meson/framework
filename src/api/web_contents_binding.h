@@ -135,7 +135,7 @@ class WebContentsBinding : public APIBindingT<WebContentsBinding, WebContentsCla
 
  protected:
   // Create window with the given disposition.
-  void OnCreateWindow(const GURL& target_url, const std::string& frame_name, WindowOpenDisposition disposition, const std::vector<base::string16>& features);
+  void OnCreateWindow(const GURL& target_url, const std::string& frame_name, WindowOpenDisposition disposition, const std::vector<std::string>& features);
   // Callback triggered on permission response.
   void OnEnterFullscreenModeForTab(content::WebContents* source, const GURL& origin, bool allowed);
 

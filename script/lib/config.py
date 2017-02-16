@@ -2,9 +2,10 @@
 
 import sys
 import os
+import errno
 
 BASE_URL = 'https://s3.amazonaws.com/github-janky-artifacts/libchromiumcontent'
-LIBCHROMIUMCONTENT_COMMIT = 'e0da1e9caa7c8f3da3519963a9ea32abba43c7c8'
+LIBCHROMIUMCONTENT_COMMIT = '4f5b89374df7ee69095b9f7d50b30fb46ddd7407'
 
 PLATFORM = {
     'cygwin': 'win32',

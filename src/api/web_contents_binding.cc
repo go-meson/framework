@@ -203,7 +203,7 @@ bool WebContentsBinding::DidAddMessageToConsole(content::WebContents* source,
 void WebContentsBinding::OnCreateWindow(const GURL& target_url,
                                         const std::string& frame_name,
                                         WindowOpenDisposition disposition,
-                                        const std::vector<base::string16>& features) {
+                                        const std::vector<std::string>& features) {
   LOG(INFO) << __PRETTY_FUNCTION__ << " : " << type_;
   if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN)
     EmitEvent("-new-window",

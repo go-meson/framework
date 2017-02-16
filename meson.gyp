@@ -40,6 +40,7 @@
                 'libraries': [
                 '$(SDKROOT)/System/Library/Frameworks/Carbon.framework',
                 '$(SDKROOT)/System/Library/Frameworks/QuartzCore.framework',
+                '$(SDKROOT)/System/Library/Frameworks/Quartz.framework',
                 ],
             },
             'mac_bundle': 1,
@@ -213,10 +214,12 @@
             'export_dependent_settings': [
                 'vendor/brightray/brightray.gyp:brightray',
             ],
-            'link_settings': {
-                'libraries': [ '<@(libchromiumcontent_v8_libraries)' ],
-            },
             'conditions': [
+                ['libchromiumcontent_component', {
+                    'link_settings': {
+                      'libraries': [ '<@(libchromiumcontent_v8_libraries)' ],
+                    },
+                }],
                 ['OS=="mac" and mas_build==0', {
                     'dependencies': [
                     ],

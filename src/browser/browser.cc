@@ -3,11 +3,13 @@
 #include <string>
 
 #include "browser/browser_main_parts.h"
+#include "browser/browser_observer.h"
 #include "browser/native_window.h"
 #include "browser/window_list.h"
 #include "base/files/file_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "brightray/browser/brightray_paths.h"
 

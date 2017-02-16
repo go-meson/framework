@@ -12,8 +12,6 @@
     },
     # Settings to compile node under Windows.
     'target_defaults': {
-        'target_conditions': [
-        ],
         'msvs_cygwin_shell': 0, # Strangely setting it to 1 would make building under cygwin fail.
         'msvs_disabled_warnings': [
             4005,  # (node.h) macro redefinition
@@ -29,29 +27,6 @@
             4838,  # (atlgdi.h) conversion from 'int' to 'UINT' requires a narrowing conversion
             4996,  # (atlapp.h) 'GetVersionExW': was declared deprecated
         ],
-        'msvs_settings': {
-          'VCCLCompilerTool': {
-            'WarnAsError': 'false',
-          },
-        },
-        'xcode_settings': {
-          'GCC_TREAT_WARNINGS_AS_ERRORS': 'NO',
-          'WARNING_CFLAGS': [
-            '-Wno-unknown-warning-option',
-            '-Wno-parentheses-equality',
-            '-Wno-unused-function',
-            '-Wno-sometimes-uninitialized',
-            '-Wno-pointer-sign',
-            '-Wno-sign-compare',
-            '-Wno-string-plus-int',
-            '-Wno-unused-variable',
-            '-Wno-deprecated-declarations',
-            '-Wno-return-type',
-            '-Wno-gnu-folding-constant',
-            '-Wno-shift-negative-value',
-            '-Wno-varargs', # https://git.io/v6Olj
-          ],
-        }
     },
     'conditions': [
         # The breakdpad on Windows assumes Debug_x64 and Release_x64 configurations.

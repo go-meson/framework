@@ -44,9 +44,12 @@ def main():
         build_targets = [args.target]
 
     for build_target in build_targets:
-        ret = subprocess.call([ninja, '-C', build_path, build_target])
-        if ret != 0:
-            sys.exit(ret)
+      cmds = [ninja, '-C', build_path, build_target]
+      if args.verbose:
+        cmds.append('-v')
+      ret = subprocess.call(cmds)
+      if ret != 0:
+        sys.exit(ret)
 
 
 def parse_args():
@@ -60,6 +63,9 @@ def parse_args():
                       help='Build specified target',
                       default='',
                       required=False)
+  parser.add_argument('-v', '--verbose',
+                      action='store_true',
+                      help='Prints the output of subprocess')
   return parser.parse_args()
 
 

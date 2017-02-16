@@ -14,6 +14,7 @@
 #include "content/public/renderer/render_view.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 //#include "third_party/WebKit/public/web/WebScopedMicrotaskSuppression.h"
+#include "gin/modules/module_registry.h"
 
 #include "renderer/extensions/script_context.h"
 #include "renderer/extensions/safe_builtins.h"
