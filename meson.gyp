@@ -214,12 +214,10 @@
             'export_dependent_settings': [
                 'vendor/brightray/brightray.gyp:brightray',
             ],
+            'link_settings': {
+                'libraries': [ '<@(libchromiumcontent_v8_libraries)' ],
+            },
             'conditions': [
-                ['libchromiumcontent_component', {
-                    'link_settings': {
-                      'libraries': [ '<@(libchromiumcontent_v8_libraries)' ],
-                    },
-                }],
                 ['OS=="mac" and mas_build==0', {
                     'dependencies': [
                     ],
